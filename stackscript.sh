@@ -1,37 +1,41 @@
 #!/bin/bash
-#
-#<UDF name="ssuser" Label="Sudo user username?" example="username" />
-#<UDF name="sspassword" Label="Sudo user password?" example="strongPassword" />
-#<UDF name="sspubkey" Label="SSH pubkey (installed for root and sudo user)?" example="ssh-rsa ..." />
-#
-# Works for CentOS 7
 
+#<UDF name="admin_users" Label="Admin users (separated by commas)" example="admin1,admin2" />
+#<UDF name="actions_user" Label="Deploy actions username" example="actions" />
+#<UDF name="app_name" Label="Name of app" example="ssh-rsa ..." />
+
+# Works for CentOS 7
 # Inspired by: https://raw.githubusercontent.com/mb243/linux-deployment-scripts/master/hardened-CentOS7.sh
 
-# AS root     *******************************************
+# AS root *******************************************
 
-if [[ ! $SSUSER ]]; then read -p "Sudo user username?" SSUSER; fi
-if [[ ! $SSPASSWORD ]]; then read -p "Sudo user password?" SSPASSWORD; fi
-if [[ ! $SSPUBKEY ]]; then read -p "SSH pubkey (installed for root and sudo user)?" SSPUBKEY; fi
+if [[ ! $ADMIN_USERS ]]; then read -p "List all admin users (separated by commas, eg: admin1,admin2)" ADMIN_USERS; fi
+if [[ ! $ACTIONS_USER ]]; then read -p "Username for deploy actions user?" ACTIONS_USER; fi
+if [[ ! $APP_NAME ]]; then read -p "Name of app (/srv/$ACTIONS_USER/<app name> will be created)?" APP_NAME; fi
 
-# set up sudo user
-echo "Setting sudo user: $SSUSER..."
-useradd $SSUSER
-usermod -aG wheel $SSUSER
-echo "...done"
-# sudo user complete
+# Configure Groups
+echo "Creating admin and dev groups..."
+groupadd admin
+groupadd dev
 
-# set up ssh pubkey
-# for x in... loop doesn't work here, sadly
-echo "Setting up ssh pubkeys..."
-mkdir -p /root/.ssh
-mkdir -p /home/$SSUSER/.ssh
-echo "$SSPUBKEY" >> /root/.ssh/authorized_keys
-echo "$SSPUBKEY" >> /home/$SSUSER/.ssh/authorized_keys
-chmod -R 700 /root/.ssh
-chmod -R 700 /home/${SSUSER}/.ssh
-chown -R ${SSUSER}:${SSUSER} /home/${SSUSER}/.ssh
-echo "...done"
+# Configure Users
+for user in $(echo $ADMIN_USERS | sed "s/,/ /g")
+do
+  echo "Creating admin user: $user..."
+  adduser $user && passwd $user
+  usermod -aG admin,dev,wheel $user
+done
+
+echo "Creating actions user: $ACTIONS_USER"
+adduser $ACTIONS_USER
+usermod -aG dev $ACTIONS_USER
+
+ACTIONS_DIR="/srv/$ACTIONS_USER"
+APP_DIR="$ACTIONS_DIR/$APP_NAME"
+
+mkdir -p $APP_DIR
+chown -R $ACTIONS_USER:dev $APP_DIR
+chmod -R g+ws $ACTIONS_USER
 
 # disable password and root over ssh
 echo "Disabling passwords and root login over ssh..."
@@ -58,9 +62,8 @@ echo "Setting up automatic updates..."
 yum install -y yum-cron
 sed -i -e "s/apply_updates = no/apply_updates = yes/" /etc/yum/yum-cron.conf
 echo "...done"
-# auto-updates complete
 
-# set up fail2ban
+# Set up fail2ban
 echo "Setting up fail2ban..."
 yum install -y fail2ban
 cd /etc/fail2ban
@@ -71,7 +74,7 @@ systemctl enable fail2ban
 systemctl start fail2ban
 echo "...done"
 
-# set up firewalld
+# Set up firewalld
 # https://basildoncoder.com/blog/logging-connections-with-firewalld.html
 # https://www.computernetworkingnotes.com/rhce-study-guide/firewalld-rich-rules-explained-with-examples.html
 # https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/security_guide/configuring_complex_firewall_rules_with_the_rich-language_syntax
@@ -99,33 +102,18 @@ yum install -y ntp
 systemctl enable ntpd
 systemctl start ntpd
 
-# Configure Groups
-echo "Adding groups and users..."
-groupadd admin
-groupadd dev
-
-adduser actions && passwd actions
-usermod -aG dev actions
-
-mkdir -p /srv/actions/app
-chown -R actions:dev /srv/actions
-chmod -R g+ws actions
-eco "...done"
-
 # Configure SELinux
 echo "Configuring SELinux..."
 yum install -y policycoreutils policycoreutils-python selinux-policy selinux-policy-targeted libselinux-utils setools setools-console
 echo "...done"
 
 
-# AS non-root account ************************************
-set -m
-sudo -i -u actions /bin/bash - << EOF
-echo "Switching to actions user..."
-su actions
+# AS non-root admin ************************************
 
+FIRST_ADMIN=$(cut -d ',' -f1 <<< $ADMIN_USERS)
+sudo -i -u $FIRST_ADMIN /bin/bash - << EOF
 # Install git
-echo "Installing git..."
+echo "Installing git from source..."
 sudo yum -y install git asciidoc xmlto docbook2X
 sudo yum -y install gcc curl-devel expat-devel gettext-devel openssl-devel zlib-devel perl-ExtUtils-MakeMaker
 
@@ -134,7 +122,6 @@ cd git
 make -i prefix=/usr all doc info
 sudo make -i prefix=/usr install install-doc install-html install-info
 cd .. && rm -rf git
-
 
 # Install Docker
 echo "Installing docker..."
@@ -148,70 +135,23 @@ sudo pip install --upgrade pip
 sudo pip install docker-compose
 
 sudo systemctl start docker
-sudo gpasswd -M kabir,sasquatch docker
+sudo gpasswd -M $ADMIN_USERS docker
 echo "...done"
+EOF
 
-# (need to exit to acquire docker group membership)
-exit
 
-# Confirm docker works
-echo "Checking if docker works..."
-docker run hello-world
-docker run --name docker-nginx -p 80:80 -d nginx
-curl localhost
+# AS actions ************************************
 
 # Set up https://github.com/nginx-proxy/docker-letsencrypt-nginx-proxy-companion/
+sudo -i -u $ACTIONS_USER /bin/bash - << EOF
 echo "Setting up host's nginx-proxy..."
-mkdir -p /srv/actions/nginx-proxy
-cd /srv/actions/nginx-proxy
-echo "
-version: '3.7'
-
-services:
-  nginx-proxy:
-    container_name: nginx-proxy
-    image: jwilder/nginx-proxy
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - conf:/etc/nginx/conf.d
-      - vhost:/etc/nginx/vhost.d
-      - html:/usr/share/nginx/html
-      - dhparam:/etc/nginx/dhparam
-      - certs:/etc/nginx/certs:ro
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-
-  letsencrypt:
-    container_name: nginx-proxy-le
-    image: jrcs/letsencrypt-nginx-proxy-companion
-    volumes:
-      - certs:/etc/nginx/certs:rw
-      - vhost:/etc/nginx/vhost.d
-      - html:/usr/share/nginx/html
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      - NGINX_PROXY_CONTAINER=nginx-proxy
-
-volumes:
-  conf:
-  vhost:
-  html:
-  dhparam:
-  certs:
-
-networks:
-  default:
-    name: nginx-proxy
-" >> docker-compose.yml
-
+mkdir -p $ACTIONS_DIR/nginx-proxy
+cd $ACTIONS_DIR/nginx-proxy
+curl -o docker-compose.yml -L https://raw.githubusercontent.com/sarink-software/actions-deploy-to-linode/main/nginx-proxy-docker-compose.yml
 docker-compose up -d 
 sleep 30
 docker-compose logs
 EOF
-
-echo "Setting $SSUSER password $SSPASSWORD..."
-echo $SSPASSWORD | passwd $SSUSER --stdin
 
 echo "All finished! Rebooting..."
 (sleep 5; reboot) &
