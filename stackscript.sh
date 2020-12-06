@@ -2,16 +2,14 @@
 
 #<UDF name="admin_users" Label="Admin users (separated by commas)" example="admin1,admin2" />
 #<UDF name="actions_user" Label="Deploy actions username" example="actions" />
-#<UDF name="app_name" Label="Name of app" example="ssh-rsa ..." />
 
 # Works for CentOS 7
 # Inspired by: https://raw.githubusercontent.com/mb243/linux-deployment-scripts/master/hardened-CentOS7.sh
 
 # AS root *******************************************
 
-if [[ ! $ADMIN_USERS ]]; then read -p "List all admin users (separated by commas, eg: admin1,admin2)" ADMIN_USERS; fi
-if [[ ! $ACTIONS_USER ]]; then read -p "Username for deploy actions user?" ACTIONS_USER; fi
-if [[ ! $APP_NAME ]]; then read -p "Name of app (/srv/$ACTIONS_USER/<app name> will be created)?" APP_NAME; fi
+if [[ ! $ADMIN_USERS ]]; then read -p "List all admin users (separated by commas, eg: admin1,admin2): " ADMIN_USERS; fi
+if [[ ! $ACTIONS_USER ]]; then read -p "Username for deploy actions user?: " ACTIONS_USER; fi
 
 # Configure Groups
 echo "Creating admin and dev groups..."
@@ -22,20 +20,19 @@ groupadd dev
 for user in $(echo $ADMIN_USERS | sed "s/,/ /g")
 do
   echo "Creating admin user: $user..."
-  adduser $user && passwd $user
+  useradd $user && echo $user | passwd $user --stdin
   usermod -aG admin,dev,wheel $user
 done
 
 echo "Creating actions user: $ACTIONS_USER"
-adduser $ACTIONS_USER
+useradd $ACTIONS_USER && echo $ACTIONS_USER | passwd $ACTIONS_USER --stdin
 usermod -aG dev $ACTIONS_USER
 
 ACTIONS_DIR="/srv/$ACTIONS_USER"
-APP_DIR="$ACTIONS_DIR/$APP_NAME"
 
-mkdir -p $APP_DIR
-chown -R $ACTIONS_USER:dev $APP_DIR
-chmod -R g+ws $ACTIONS_USER
+mkdir -p $ACTIONS_DIR
+chown -R $ACTIONS_USER:dev $ACTIONS_DIR
+chmod -R g+ws $ACTIONS_DIR
 
 # disable password and root over ssh
 echo "Disabling passwords and root login over ssh..."
@@ -107,50 +104,42 @@ echo "Configuring SELinux..."
 yum install -y policycoreutils policycoreutils-python selinux-policy selinux-policy-targeted libselinux-utils setools setools-console
 echo "...done"
 
-
-# AS non-root admin ************************************
-
-FIRST_ADMIN=$(cut -d ',' -f1 <<< $ADMIN_USERS)
-sudo -i -u $FIRST_ADMIN /bin/bash - << EOF
 # Install git
-echo "Installing git from source..."
-sudo yum -y install git asciidoc xmlto docbook2X
-sudo yum -y install gcc curl-devel expat-devel gettext-devel openssl-devel zlib-devel perl-ExtUtils-MakeMaker
+# echo "Installing git from source..."
+# sudo yum -y install git asciidoc xmlto docbook2X
+# sudo yum -y install gcc curl-devel expat-devel gettext-devel openssl-devel zlib-devel perl-ExtUtils-MakeMaker
 
-git clone https://github.com/git/git
-cd git
-make -i prefix=/usr all doc info
-sudo make -i prefix=/usr install install-doc install-html install-info
-cd .. && rm -rf git
+# git clone https://github.com/git/git
+# cd git
+# make -i prefix=/usr all doc info
+# sudo make -i prefix=/usr install install-doc install-html install-info
+# cd .. && rm -rf git
 
 # Install Docker
 echo "Installing docker..."
-sudo yum install -y yum-utils device-mapper-persistent-data lvm2
-sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-sudo yum-config-manager --enable docker-ce-edge
-sudo yum-config-manager --enable docker-ce-test
-
-sudo yum -y install docker-ce python-pip
-sudo pip install --upgrade pip
-sudo pip install docker-compose
-
-sudo systemctl start docker
-sudo gpasswd -M $ADMIN_USERS docker
+yum update -y
+yum install -y git yum-utils device-mapper-persistent-data lvm2 httpd-tools python3
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+yum install -y docker-ce docker-ce-cli containerd.io
+curl -4 -o get-pip.py -L https://bootstrap.pypa.io/get-pip.py
+python3 get-pip.py && rm -f $PWD/get-pip.py 
+pip3 install docker-compose
+systemctl start docker && systemctl enable docker
+gpasswd -M $ADMIN_USERS,$ACTIONS_USER docker
 echo "...done"
-EOF
 
 
-# AS actions ************************************
+# AS actions user ************************************
 
 # Set up https://github.com/nginx-proxy/docker-letsencrypt-nginx-proxy-companion/
 sudo -i -u $ACTIONS_USER /bin/bash - << EOF
-echo "Setting up host's nginx-proxy..."
-mkdir -p $ACTIONS_DIR/nginx-proxy
-cd $ACTIONS_DIR/nginx-proxy
-curl -o docker-compose.yml -L https://raw.githubusercontent.com/sarink-software/actions-deploy-to-linode/main/nginx-proxy-docker-compose.yml
-docker-compose up -d 
-sleep 30
-docker-compose logs
+  echo "Setting up host's nginx-proxy..."
+  mkdir -p $ACTIONS_DIR/nginx-proxy
+  cd $ACTIONS_DIR/nginx-proxy
+  curl -4 -o docker-compose.yml -L https://raw.githubusercontent.com/sarink-software/actions-deploy-to-linode/main/nginx-proxy-docker-compose.yml
+  docker-compose up -d 
+  sleep 30
+  docker-compose logs
 EOF
 
 echo "All finished! Rebooting..."
