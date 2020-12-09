@@ -1,5 +1,3 @@
-#!/bin/bash
-
 #<UDF name="admin_users_json" Label="JSON array for authorized users" example="[{'username':'name', 'ssh_public_key':'public key' }]" />
 #<UDF name="actions_user" Label="Deploy actions username" example="actions" />
 #<UDF name="actions_key" Label="Deploy actions public ssh key" example="actions" />
@@ -13,12 +11,12 @@ if [[ ! $ADMIN_USERS_JSON ]]; then read -p "JSON array for authorized users, eg 
 if [[ ! $ACTIONS_USER ]]; then read -p "Username for deploy actions user?: " ACTIONS_USER; fi
 if [[ ! $ACTIONS_KEY ]]; then read -p "Public ssh key for deploy actions user?: " ACTIONS_KEY; fi
 
-# Initial needfuls
+# Install needfuls
 yum update -y
 yum install -y epel-release
 yum update -y
 
-# Install jq
+# Install jq for parsing admin users json
 sudo yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 sudo yum -y install jq
 
@@ -26,6 +24,19 @@ sudo yum -y install jq
 echo "Creating admin and dev groups..."
 groupadd admin
 groupadd dev
+
+create_user() {
+  username=$1
+  password=$2
+  ssh_public_key=$3
+  useradd $username && echo $password | passwd $password --stdin
+  mkdir -p /home/$username/.ssh
+  echo "$ssh_public_key" >> /home/$username/.ssh/authorized_keys
+  chmod -R 700 /home/$username/.ssh 
+  chown -R $username:$username /home/$username
+  chown -R $username:$username /home/$username/.ssh
+  chmod 644 /home/$username/.ssh/authorized_keys
+}
 
 # Configure Users
 ADMIN_USERNAMES=""
@@ -38,21 +49,13 @@ for row in $(echo $ADMIN_USERS_JSON | jq -r '.[] | @base64'); do
   ssh_public_key=$(_jq '.ssh_public_key')
   echo "Creating admin user: $username..."
   ADMIN_USERNAMES="$username,$ADMIN_USERNAMES"
-  useradd $username && echo $password | passwd $password --stdin
+  create_user $username $password $ssh_public_key
   usermod -aG admin,dev,wheel $username
-  mkdir -p /home/$user/.ssh
-  echo "$ssh_public_key" >> /home/$user/.ssh/authorized_keys
-  chmod -R 700 /home/$user/.ssh 
-  chown -R $user:$user /home/$user/.ssh
 done
 
 echo "Creating actions user: $ACTIONS_USER"
-useradd $ACTIONS_USER && echo $ACTIONS_USER | passwd $ACTIONS_USER --stdin
+create_user $ACTIONS_USER $ACTIONS_USER $ACTIONS_KEY
 usermod -aG dev $ACTIONS_USER
-mkdir -p /home/$ACTIONS_USER/.ssh
-echo "$ACTIONS_KEY" >> /home/$ACTIONS_USER/.ssh/authorized_keys
-chmod -R 700 /home/$ACTIONS_USER/.ssh 
-chown -R $ACTIONS_USER:$ACTIONS_USER /home/$ACTIONS_USER/.ssh
 
 ACTIONS_DIR="/srv/$ACTIONS_USER"
 
@@ -60,7 +63,7 @@ mkdir -p $ACTIONS_DIR
 chown -R $ACTIONS_USER:dev $ACTIONS_DIR
 chmod -R g+ws $ACTIONS_DIR
 
-# disable password and root over ssh
+# Disable password and root over ssh
 echo "Disabling passwords and root login over ssh..."
 sed -i -e "s/PermitRootLogin yes/PermitRootLogin no/" /etc/ssh/sshd_config
 sed -i -e "s/#PermitRootLogin no/PermitRootLogin no/" /etc/ssh/sshd_config
@@ -70,7 +73,7 @@ echo "Restarting sshd..."
 systemctl restart sshd
 echo "...done"
 
-#remove unneeded services
+# Remove unneeded services
 echo "Removing unneeded services..."
 yum remove -y avahi chrony
 echo "...done"
@@ -144,9 +147,13 @@ yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce
 yum install -y docker-ce docker-ce-cli containerd.io
 curl -4 -o get-pip.py -L https://bootstrap.pypa.io/get-pip.py
 python3 get-pip.py && rm -f $PWD/get-pip.py 
-pip3 install docker-compose
+# pip3 install docker-compose
+sudo curl -4 -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 systemctl start docker && systemctl enable docker
-gpasswd -M $ADMIN_USERNAMES,$ACTIONS_USER docker
+gpasswd -M "$ADMIN_USERNAMES$ACTIONS_USER" docker
+docker-compose --version
 echo "...done"
 
 
@@ -159,9 +166,8 @@ sudo -i -u $ACTIONS_USER /bin/bash - << EOF
   cd $ACTIONS_DIR/nginx-proxy
   curl -4 -o docker-compose.yml -L https://raw.githubusercontent.com/sarink-software/actions-deploy-to-linode/main/nginx-proxy-docker-compose.yml
   docker-compose up -d 
-  sleep 30
+  sleep 40
   docker-compose logs
 EOF
 
-echo "All finished! Rebooting..."
-(sleep 5; reboot) &
+exit 0
