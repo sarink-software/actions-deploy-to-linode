@@ -1,15 +1,26 @@
 #!/bin/bash
 
-#<UDF name="admin_users" Label="Admin users (separated by commas)" example="admin1,admin2" />
+#<UDF name="admin_users_json" Label="JSON array for authorized users" example="[{'username':'name', 'ssh_public_key':'public key' }]" />
 #<UDF name="actions_user" Label="Deploy actions username" example="actions" />
+#<UDF name="actions_key" Label="Deploy actions public ssh key" example="actions" />
 
 # Works for CentOS 7
 # Inspired by: https://raw.githubusercontent.com/mb243/linux-deployment-scripts/master/hardened-CentOS7.sh
 
 # AS root *******************************************
 
-if [[ ! $ADMIN_USERS ]]; then read -p "List all admin users (separated by commas, eg: admin1,admin2): " ADMIN_USERS; fi
+if [[ ! $ADMIN_USERS_JSON ]]; then read -p "JSON array for authorized users, eg [{'username':'name', 'ssh_public_key':'public key' }]: " ADMIN_USERS_JSON; fi
 if [[ ! $ACTIONS_USER ]]; then read -p "Username for deploy actions user?: " ACTIONS_USER; fi
+if [[ ! $ACTIONS_KEY ]]; then read -p "Public ssh key for deploy actions user?: " ACTIONS_KEY; fi
+
+# Initial needfuls
+yum update -y
+yum install -y epel-release
+yum update -y
+
+# Install jq
+sudo yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+sudo yum -y install jq
 
 # Configure Groups
 echo "Creating admin and dev groups..."
@@ -17,16 +28,31 @@ groupadd admin
 groupadd dev
 
 # Configure Users
-for user in $(echo $ADMIN_USERS | sed "s/,/ /g")
-do
-  echo "Creating admin user: $user..."
-  useradd $user && echo $user | passwd $user --stdin
-  usermod -aG admin,dev,wheel $user
+ADMIN_USERNAMES=""
+for row in $(echo $ADMIN_USERS_JSON | jq -r '.[] | @base64'); do
+  _jq() {
+   echo ${row} | base64 --decode | jq -r ${1}
+  }
+  username=$(_jq '.username')
+  password=$(_jq '.username')
+  ssh_public_key=$(_jq '.ssh_public_key')
+  echo "Creating admin user: $username..."
+  ADMIN_USERNAMES="$username,$ADMIN_USERNAMES"
+  useradd $username && echo $password | passwd $password --stdin
+  usermod -aG admin,dev,wheel $username
+  mkdir -p /home/$user/.ssh
+  echo "$ssh_public_key" >> /home/$user/.ssh/authorized_keys
+  chmod -R 700 /home/$user/.ssh 
+  chown -R $user:$user /home/$user/.ssh
 done
 
 echo "Creating actions user: $ACTIONS_USER"
 useradd $ACTIONS_USER && echo $ACTIONS_USER | passwd $ACTIONS_USER --stdin
 usermod -aG dev $ACTIONS_USER
+mkdir -p /home/$ACTIONS_USER/.ssh
+echo "$ACTIONS_KEY" >> /home/$ACTIONS_USER/.ssh/authorized_keys
+chmod -R 700 /home/$ACTIONS_USER/.ssh 
+chown -R $ACTIONS_USER:$ACTIONS_USER /home/$ACTIONS_USER/.ssh
 
 ACTIONS_DIR="/srv/$ACTIONS_USER"
 
@@ -48,11 +74,6 @@ echo "...done"
 echo "Removing unneeded services..."
 yum remove -y avahi chrony
 echo "...done"
-
-# Initial needfuls
-yum update -y
-yum install -y epel-release
-yum update -y
 
 # Set up automatic  updates
 echo "Setting up automatic updates..."
@@ -125,7 +146,7 @@ curl -4 -o get-pip.py -L https://bootstrap.pypa.io/get-pip.py
 python3 get-pip.py && rm -f $PWD/get-pip.py 
 pip3 install docker-compose
 systemctl start docker && systemctl enable docker
-gpasswd -M $ADMIN_USERS,$ACTIONS_USER docker
+gpasswd -M $ADMIN_USERNAMES,$ACTIONS_USER docker
 echo "...done"
 
 
