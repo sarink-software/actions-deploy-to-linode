@@ -49,12 +49,12 @@ for row in $(echo $ADMIN_USERS_JSON | jq -r '.[] | @base64'); do
   ssh_public_key=$(_jq '.ssh_public_key')
   echo "Creating admin user: $username..."
   ADMIN_USERNAMES="$username,$ADMIN_USERNAMES"
-  create_user $username $password $ssh_public_key
+  create_user $username $password "$ssh_public_key"
   usermod -aG admin,dev,wheel $username
 done
 
 echo "Creating actions user: $ACTIONS_USER"
-create_user $ACTIONS_USER $ACTIONS_USER $ACTIONS_KEY
+create_user $ACTIONS_USER $ACTIONS_USER "$ACTIONS_KEY"
 usermod -aG dev $ACTIONS_USER
 
 ACTIONS_DIR="/srv/$ACTIONS_USER"
