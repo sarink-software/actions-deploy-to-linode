@@ -1,10 +1,10 @@
+import artifact from '@actions/artifact';
 import {
   createDomain,
   CreateDomainPayload,
   createDomainRecord,
   createLinode,
   CreateLinodeRequest,
-  deleteLinode,
   Domain,
   DomainRecord,
   getDomainRecords,
@@ -14,10 +14,12 @@ import {
   setToken,
   updateDomainRecord,
 } from '@linode/api-v4';
-import { find, first, uniq } from 'lodash';
+import { find, uniq } from 'lodash';
+import { NodeSSH } from 'node-ssh';
 import ora from 'ora';
-import { linodePat, rootPass } from 'secrets';
+import shortuuid from 'short-uuid';
 import waitOn from 'wait-on';
+import { linodePat, rootPass } from './secrets';
 
 const startLoader = (options: ora.Options) => {
   const loader = ora(options);
@@ -125,27 +127,35 @@ const findOrCreateLinode = async (
     'linode-pat': linodePat,
     'admin-users-json':
       '[{"username":"kabir", "ssh_public_key":"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDjoKT2A/FpxuIekbvbYtub4a5kvLmvZeJuxiso98yrnq+k6r4RgRJVL8bbowcl22k8UmpkBzf5yAy4BFyIEn8fhOXf57AozFq6Pcotj4Gz0YHj6zvShZjNaVauA2busQFpKr5GmrWOKcgZbAa76mWZa96xgbW60Ia3tQpOUQD53HAZCSp4Z+zVkP/iLJcfOOJmd03QesX2dUTGXoUTK0HBVeOryzqe02V1lxuGZPRrHHJAlrDOq2K4irP6W2b4x/Kfjun4P0wok4TJRqENWVtBItCOA/lKFfykxDx9JSEBbyiui6gkp3/8qYlYNAcccNqBUmNq2HVma48bAQLIpctwu3CCkJ9fsDm4WWQ2rsJBnMdZYfN4zw8rTdrDCrk8xBh+CEkPB30Nw2iKQLBAAhwK4024yr09Ti1DvBU64iObvxOwNDwZ9/CEoXLUvb5E3Ld306z3e1SNGaK8WJQ1HubNUp+su1vbG3WgA7uwa/QZeFgMHxJQOV0saWpF1IqNYHsGLbiwm0Pm2BN2h0V27L+2y8GnvuZXTFzFx4TVkJ87UeZToY4ftGsgjP7wkf0LiRLQLc5HDJqoLNebKTLpqAebVUN9UqH0fg2bwq+Io3IU8EFuy+qcxYcqNPT5vxZCSQRTQ01JcyK2tfx/LHxqISMquDA4pNjkkLzv9QOlWDWZCQ== sarink87@gmail.com"}]',
-    'linode-label': `kabirsarin.com`,
+    'linode-label': `kabir-sarin.com`,
     domains: [
       { name: 'kabir-sarin.com', subdomains: [] },
       { name: 'kabirsarin.com', subdomains: [] },
       { name: 'kabir-sarin.net', subdomains: [] },
     ],
     email: 'kabir@sarink.net',
+    'artifact-name': '',
     'root-pass': rootPass,
+    'deploy-directory': '/srv/actions',
+    'deploy-command': '',
     'actions-user': 'actions',
+    'actions-private-key': '',
     'actions-key':
       'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDA1athEhnhrxBayudz2jvozqJiHrtdk7ITQdWTJgK9SfTUz/Hyq7IiJQzlhqCbxWlKQeHXjRZdUAdtD3uGZAdKHYNC5PodFhvY3gX4z/0ULcp/Yrbvd1t1tdzRxEPd+nYYyr03WX5SFnlgn0hXDdVQ9aH/sTCcYB3G6iPEFQoUhrEAnRW8C7iLLO3r5/DjJcUnnMb0g0h1W2uvofQlQCnoerR13FycZK7niKUoAKmd5EjLx7y1qFDyyTVJJO9R2kA741nIfl1/EEkVA9+284NhUbaQR+OhFXWzqWD+4pz/84EDrJxMCy7CWo4ioqX7M9+U19ponKSa2UDJK7JWvuIa2oybAOzps9Jq96J9/jxFua0VO2QOkknTO1DjZYlUIEspQUZxjlxjdNhfkT+CzGZ3l8mnNGcR8vFcpzaHkwQlxo+ZTSRD4kGy/eaVt4OX2VO+iAMaFwlZbBDCxyxqR8NG4YInR+vUiwKPxPn3+eMx9VDIAVkQ0rq+tRUe1A2sMZFzVdgGG/RXsLF9019l0ROAfO8gHphUw5Ny8vN4rsHpKpFCfrHqU0BAInbnqfQXz5CADFb/sRhEWyB/DFelEO6ZfaIukwzJjd4ZFz8hb2cVDEYZEXhEZfprlS9UdQhZzP3hpif195czCrlTB0GRbpMgTWDluPW7p2VMs3PCjXsDUw== actions',
   };
 
+  const firstDomainName = input.domains[0].name;
+
+  const defaults = {
+    'root-pass': shortuuid.generate(),
+    'admin-users-json': '[]',
+    'deploy-directory': '/srv/actions',
+    'actions-user': 'actions',
+    'linode-label': firstDomainName,
+  };
+
   try {
     setToken(input['linode-pat']);
-
-    const existingLinode = await findLinodeByLabel(input['linode-label']);
-    if (existingLinode) {
-      console.log(`Deleting Linode ${logLinode(existingLinode)}`);
-      await deleteLinode(existingLinode.id);
-    }
 
     const linode = await findOrCreateLinode(input['linode-label'], {
       root_pass: input['root-pass'],
@@ -171,7 +181,6 @@ const findOrCreateLinode = async (
       })
     );
 
-    const firstDomainName = input['domains'][0].name;
     const loader = startLoader({
       text: `Waiting for new Linode to initialize (checking http://${firstDomainName})...`,
     });
@@ -186,6 +195,25 @@ const findOrCreateLinode = async (
     });
 
     console.log(`Success! https://${firstDomainName} is up and running!`);
+
+    const artifactClient = artifact.create();
+    const downloadedArtifact = await artifactClient.downloadArtifact(input['artifact-name']);
+
+    const ssh = new NodeSSH();
+
+    await ssh.connect({
+      host: firstDomainName,
+      username: input['actions-user'],
+      privateKey: input['actions-private-key'],
+    });
+
+    await ssh.putFile(downloadedArtifact.downloadPath, input['deploy-directory']);
+
+    await ssh.exec(input['deploy-command'], [], {
+      cwd: input['deploy-directory'],
+      onStdout: (chunk) => console.log('stdoutChunk', chunk.toString('utf8')),
+      onStderr: (chunk) => console.error('stderrChunk', chunk.toString('utf8')),
+    });
   } catch (e) {
     console.error(e, e.message);
   }
