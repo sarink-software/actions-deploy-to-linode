@@ -7,9 +7,9 @@
 
 # AS root *******************************************
 
-if [[ ! $ADMIN_USERS_JSON ]]; then read -p "JSON array for authorized users, eg [{'username':'name', 'ssh_public_key':'public key' }]: " ADMIN_USERS_JSON; fi
-if [[ ! $ACTIONS_USER ]]; then read -p "Username for deploy actions user?: " ACTIONS_USER; fi
-if [[ ! $ACTIONS_KEY ]]; then read -p "Public ssh key for deploy actions user?: " ACTIONS_KEY; fi
+if [[ ! $ADMIN_USERS_JSON ]]; then read -p "JSON array for authorized users, eg [{'user':'name', 'public_key':'ss-rsa ABC123...' }]: " ADMIN_USERS_JSON; fi
+if [[ ! $DEPLOY_USER ]]; then read -p "Deploy username?: " DEPLOY_USER; fi
+if [[ ! $DEPLOY_USER_PUBLIC_KEY ]]; then read -p "Public ssh key for deploy user?: " DEPLOY_USER_PUBLIC_KEY; fi
 
 # Install needfuls
 yum update -y
@@ -44,24 +44,24 @@ for row in $(echo $ADMIN_USERS_JSON | jq -r '.[] | @base64'); do
   _jq() {
    echo ${row} | base64 --decode | jq -r ${1}
   }
-  username=$(_jq '.username')
-  password=$(_jq '.username')
-  ssh_public_key=$(_jq '.ssh_public_key')
-  echo "Creating admin user: $username..."
+  username=$(_jq '.user')
+  password=$(_jq '.user')
+  ssh_public_key=$(_jq '.public_key')
   ADMIN_USERNAMES="$username,$ADMIN_USERNAMES"
+  echo "Creating admin user: $username..."
   create_user $username $password "$ssh_public_key"
   usermod -aG admin,dev,wheel $username
 done
 
-echo "Creating actions user: $ACTIONS_USER"
-create_user $ACTIONS_USER $ACTIONS_USER "$ACTIONS_KEY"
-usermod -aG dev $ACTIONS_USER
+echo "Creating deploy user: $DEPLOY_USER..."
+create_user $DEPLOY_USER $DEPLOY_USER "$DEPLOY_USER_PUBLIC_KEY"
+usermod -aG dev $DEPLOY_USER
 
-ACTIONS_DIR="/srv/$ACTIONS_USER"
+DEPLOY_DIR="/srv/$DEPLOY_USER"
 
-mkdir -p $ACTIONS_DIR
-chown -R $ACTIONS_USER:dev $ACTIONS_DIR
-chmod -R g+ws $ACTIONS_DIR
+mkdir -p $DEPLOY_DIR
+chown -R $DEPLOY_USER:dev $DEPLOY_DIR
+chmod -R g+ws $DEPLOY_DIR
 
 # Disable password and root over ssh
 echo "Disabling passwords and root login over ssh..."
@@ -152,7 +152,7 @@ sudo curl -4 -L "https://github.com/docker/compose/releases/download/1.27.4/dock
 sudo chmod +x /usr/local/bin/docker-compose
 sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 systemctl start docker && systemctl enable docker
-gpasswd -M "$ADMIN_USERNAMES$ACTIONS_USER" docker
+gpasswd -M "$ADMIN_USERNAMES$DEPLOY_USER" docker
 docker-compose --version
 echo "...done"
 
@@ -160,10 +160,10 @@ echo "...done"
 # AS actions user ************************************
 
 # Set up https://github.com/nginx-proxy/docker-letsencrypt-nginx-proxy-companion/
-sudo -i -u $ACTIONS_USER /bin/bash - << EOF
+sudo -i -u $DEPLOY_USER /bin/bash - << EOF
   echo "Setting up host's nginx-proxy..."
-  mkdir -p $ACTIONS_DIR/nginx-proxy
-  cd $ACTIONS_DIR/nginx-proxy
+  mkdir -p $DEPLOY_DIR/nginx-proxy
+  cd $DEPLOY_DIR/nginx-proxy
   curl -4 -o docker-compose.yml -L https://raw.githubusercontent.com/sarink-software/actions-deploy-to-linode/main/nginx-proxy-docker-compose.yml
   docker-compose up -d 
   sleep 40
