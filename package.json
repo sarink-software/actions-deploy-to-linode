@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "tsc --project .",
     "format": "prettier --check '**/*.{js,jsx,ts,tsx,json,htm,html,yml,yaml}'",
     "format:fix": "prettier --write '**/*.{js,jsx,ts,tsx,json,htm,html,yml,yaml}'",
     "typecheck": "tsc --project . --noEmit --skipLibCheck",
@@ -21,9 +22,15 @@
   },
   "homepage": "https://github.com/sarink-software/actions-deploy-to-linode#readme",
   "dependencies": {
+    "@actions/artifact": "^0.4.1",
+    "@actions/core": "^1.2.6",
+    "@actions/github": "^4.0.0",
     "@linode/api-v4": "^0.38.0",
     "lodash.find": "^4.6.0",
+    "node-ssh": "^11.1.1",
     "ora": "^5.1.0",
+    "parse-domain": "^3.0.3",
+    "short-uuid": "^4.1.0",
     "wait-on": "^5.2.0"
   },
   "devDependencies": {
