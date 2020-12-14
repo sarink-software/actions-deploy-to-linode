@@ -1,0 +1,4 @@
+name: Deploy to Linode
+runs:
+  using: node15
+  main: npm run build && node dist/index.js
