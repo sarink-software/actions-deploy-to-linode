@@ -19,7 +19,7 @@ import {
 } from '@linode/api-v4';
 import fs from 'fs';
 import { find, uniq } from 'lodash';
-import { NodeSSH } from 'node-ssh';
+import { NodeSSH, SSHExecCommandOptions } from 'node-ssh';
 import ora from 'ora';
 import { parseDomain, ParseResultType } from 'parse-domain';
 import shortuuid from 'short-uuid';
@@ -224,22 +224,24 @@ const findOrCreateLinode = async (
       privateKey: input.deployUserPrivateKey,
     });
 
-    await ssh.putFile(downloadedArtifact.downloadPath, deployDirectory);
+    const artifactTempFile = `/tmp/${input.deployArtifact}`;
+    await ssh.putFile(downloadedArtifact.downloadPath, artifactTempFile);
 
-    const ps1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
+    const sshExecCommand = (command: string, options?: SSHExecCommandOptions) => {
+      const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
+      core.info(`${PS1} ${command}`);
+      return ssh.execCommand(command, {
+        onStdout: (chunk) => core.info(chunk.toString('utf-8')),
+        onStderr: (chunk) => core.info(chunk.toString('utf-8')),
+        ...options,
+      });
+    };
 
-    core.info(`${ps1} mkdir -p ${deployDirectory}`);
-    await ssh.exec('mkdir', ['-p', deployDirectory], {
-      onStdout: (chunk) => core.info(chunk.toString('utf-8')),
-      onStderr: (chunk) => core.info(chunk.toString('utf-8')),
-    });
-
-    core.info(`${ps1} ${input.deployCommand}`);
-    await ssh.exec('bash', ['-c', input.deployCommand], {
-      cwd: deployDirectory,
-      onStdout: (chunk) => core.info(chunk.toString('utf-8')),
-      onStderr: (chunk) => core.info(chunk.toString('utf-8')),
-    });
+    await sshExecCommand(`mkdir -p ${deployDirectory}`);
+    await sshExecCommand(`rm -rf ..?* .[!.]* *`, { cwd: deployDirectory });
+    await sshExecCommand(`mv -v ${artifactTempFile} ${deployDirectory}`, { cwd: deployDirectory });
+    await sshExecCommand(`tar -xzvf ${input.deployArtifact}`, { cwd: deployDirectory });
+    await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
   } catch (error) {
     core.setFailed(error.message);
   }
