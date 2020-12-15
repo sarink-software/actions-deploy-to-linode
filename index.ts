@@ -1,5 +1,6 @@
-import artifact from '@actions/artifact';
-import core from '@actions/core';
+// Import modules with "* as" https://github.com/vercel/ncc/issues/621
+import * as artifact from '@actions/artifact';
+import * as core from '@actions/core';
 import {
   createDomain,
   CreateDomainPayload,
