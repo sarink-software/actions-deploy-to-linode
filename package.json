@@ -5,10 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "format": "prettier --check '**/*.{js,jsx,ts,tsx,json,htm,html,yml,yaml}'",
-    "format:fix": "prettier --write '**/*.{js,jsx,ts,tsx,json,htm,html,yml,yaml}'",
-    "typecheck": "tsc --noEmit --skipLibCheck",
-    "start": "tsc --watch --skipLibCheck"
+    "package": "ncc build --source-map --license licenses.txt",
+    "format:fix": "prettier --write '**/*.{js,jsx,ts,tsx,json,htm,html,yml,yaml}'"
   },
   "repository": {
     "type": "git",
