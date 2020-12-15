@@ -1,4 +1,41 @@
-name: Deploy to Linode
+name: Create build artifact
+
+inputs:
+  linode-pat:
+    required: true
+
+  linde-label:
+    required: true
+
+  linode-root-pass:
+    required: false
+
+  linode-admin-users-file:
+    required: false
+
+  domains:
+    required: true
+
+  email:
+    required: true
+
+  deploy-artifact:
+    required: true
+
+  deploy-command:
+    required: true
+
+  deploy-directory:
+    required: false
+    default: /home/deploy
+
+  deploy-user:
+    required: false
+    default: deploy
+
+  deploy-user-private-key:
+    required: true
+
 runs:
-  using: node15
-  main: npm run build && node dist/index.js
+  using: node12
+  main: dist/index.js
