@@ -235,7 +235,7 @@ const findOrCreateLinode = async (
     });
 
     core.info(`${ps1} ${input.deployCommand}`);
-    await ssh.exec(input.deployCommand, [], {
+    await ssh.exec('bash', ['-c', input.deployCommand], {
       cwd: deployDirectory,
       onStdout: (chunk) => core.info(chunk.toString('utf-8')),
       onStderr: (chunk) => core.info(chunk.toString('utf-8')),
