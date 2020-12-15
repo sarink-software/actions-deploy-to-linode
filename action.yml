@@ -4,7 +4,7 @@ inputs:
   linode-pat:
     required: true
 
-  linde-label:
+  linode-label:
     required: true
 
   linode-root-pass:
