@@ -138,6 +138,7 @@ const findOrCreateLinode = async (
       deployUser: core.getInput('deploy-user'),
       deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
     };
+    input.deployDirectory ||= `/home/${input.deployUser}`;
 
     setToken(input.linodePat);
 

@@ -27,7 +27,6 @@ inputs:
 
   deploy-directory:
     required: false
-    default: /home/deploy
 
   deploy-user:
     required: false
