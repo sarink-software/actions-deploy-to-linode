@@ -57,7 +57,7 @@ echo "Creating deploy user: $DEPLOY_USER..."
 create_user $DEPLOY_USER $DEPLOY_USER "$DEPLOY_USER_PUBLIC_KEY"
 usermod -aG dev $DEPLOY_USER
 
-DEPLOY_DIR="/srv/$DEPLOY_USER"
+DEPLOY_DIR="/srv/deploy"
 
 mkdir -p $DEPLOY_DIR
 chown -R $DEPLOY_USER:dev $DEPLOY_DIR
