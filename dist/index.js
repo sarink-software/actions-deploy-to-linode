@@ -60,7 +60,7 @@ const findOrCreateDomain = async (domain, createOptions) => {
         return existingDomain;
     }
     const loader = startLoader({ text: 'Creating new Domain...' });
-    core.debug(JSON.stringify(createOptions, null, 2));
+    core.debug(JSON.stringify(createOptions));
     const newDomain = await api_v4_1.createDomain({ type: 'master', ...createOptions, domain });
     loader.stop();
     core.info(`Created new ${logDomain(newDomain)}`);
@@ -81,7 +81,7 @@ const updateOrCreateARecord = async (domainId, attrs) => {
     }
     const newAttrs = { type: 'A', ...attrs };
     const loader = startLoader({ text: 'Creating new Record...' });
-    core.debug(JSON.stringify(newAttrs, null, 2));
+    core.debug(JSON.stringify(newAttrs));
     const newRecord = await api_v4_1.createDomainRecord(domainId, newAttrs);
     loader.stop();
     core.info(`Created new ${logRecord(newRecord, domainId)}`);
@@ -101,7 +101,7 @@ const findOrCreateLinode = async (label, createOptions) => {
         image: 'linode/centos7',
         booted: true,
         ...createOptions,
-    }, null, 2));
+    }));
     const newLinode = await api_v4_1.createLinode({
         label,
         type: 'g6-nanode-1',
@@ -162,12 +162,13 @@ const findOrCreateLinode = async (label, createOptions) => {
             await Promise.all(allARecordNames.map((name) => updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })));
             core.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label}`);
         }));
-        const firstDomainName = parsedDomains[0].name;
+        const linodeHost = linode.ipv4[0];
+        const linodeUrl = `http://${linodeHost}`;
         const loader = startLoader({
-            text: `Waiting for new Linode to initialize (checking http://${firstDomainName})...`,
+            text: `Waiting for new Linode to initialize (checking ${linodeUrl})...`,
         });
         await wait_on_1.default({
-            resources: [firstDomainName],
+            resources: [linodeUrl],
             interval: 10 * 1000,
             timeout: 10 * 60 * 1000,
             validateStatus: (status) => status >= 200 && status <= 503,
@@ -175,17 +176,17 @@ const findOrCreateLinode = async (label, createOptions) => {
             loader.stop();
             throw e;
         });
-        core.info(`Success! https://${firstDomainName} is up and running!`);
+        core.info(`Success! ${linodeUrl} is up and running. Connected domains are: ${input.domains}`);
         const artifactClient = artifact.create();
         const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
         const ssh = new node_ssh_1.NodeSSH();
         await ssh.connect({
-            host: firstDomainName,
+            host: linodeHost,
             username: input.deployUser,
             privateKey: input.deployUserPrivateKey,
         });
         await ssh.putFile(downloadedArtifact.downloadPath, input.deployDirectory);
-        const ps1 = `${input.deployUser}@${firstDomainName}:${input.deployDirectory}$`;
+        const ps1 = `${input.deployUser}@${linodeHost}:${input.deployDirectory}$`;
         core.info(`${ps1} mkdir -p ${input.deployDirectory}`);
         await ssh.exec('mkdir', ['-p', input.deployDirectory], {
             onStdout: (chunk) => core.info(chunk.toString('utf-8')),
