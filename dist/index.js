@@ -60,6 +60,7 @@ const findOrCreateDomain = async (domain, createOptions) => {
         return existingDomain;
     }
     const loader = startLoader({ text: 'Creating new Domain...' });
+    core.debug(JSON.stringify(createOptions, null, 2));
     const newDomain = await api_v4_1.createDomain({ type: 'master', ...createOptions, domain });
     loader.stop();
     core.info(`Created new ${logDomain(newDomain)}`);
@@ -78,8 +79,9 @@ const updateOrCreateARecord = async (domainId, attrs) => {
         core.info(`Updated ${logRecord(updatedRecord, domainId)}`);
         return updatedRecord;
     }
-    const loader = startLoader({ text: 'Creating new Record...' });
     const newAttrs = { type: 'A', ...attrs };
+    const loader = startLoader({ text: 'Creating new Record...' });
+    core.debug(JSON.stringify(newAttrs, null, 2));
     const newRecord = await api_v4_1.createDomainRecord(domainId, newAttrs);
     loader.stop();
     core.info(`Created new ${logRecord(newRecord, domainId)}`);
@@ -92,6 +94,14 @@ const findOrCreateLinode = async (label, createOptions) => {
         return existingLinode;
     }
     const loader = startLoader({ text: 'Creating new Linode...' });
+    core.debug(JSON.stringify({
+        type: 'g6-nanode-1',
+        region: 'us-central',
+        stackscript_id: 693032,
+        image: 'linode/centos7',
+        booted: true,
+        ...createOptions,
+    }, null, 2));
     const newLinode = await api_v4_1.createLinode({
         label,
         type: 'g6-nanode-1',
@@ -141,6 +151,13 @@ const findOrCreateLinode = async (label, createOptions) => {
                 name: `${parsedDomain.domain}${parsedDomain.topLevelDomains}`,
                 subdomains: parsedDomain.subDomains,
             };
+        });
+        core.debug('');
+        core.debug('Parsed domains:');
+        parsedDomains.forEach((parsedDomain) => {
+            core.debug(`domain: ${parsedDomain.name}`);
+            core.debug(`subdomains: ${parsedDomain.subdomains.join(', ')}`);
+            core.debug('');
         });
         await Promise.all(parsedDomains.map(async (parsedDomain) => {
             const domain = await findOrCreateDomain(parsedDomain.name, { soa_email: input.email });
