@@ -177,12 +177,9 @@ const findOrCreateLinode = async (
       };
     });
 
-    core.debug('');
     core.debug('Parsed domains:');
     parsedDomains.forEach((parsedDomain) => {
-      core.debug(`domain: ${parsedDomain.name}`);
-      core.debug(`subdomains: ${parsedDomain.subdomains.join(', ')}`);
-      core.debug('');
+      core.debug(`domain: ${parsedDomain.name}, subdomains: ${parsedDomain.subdomains.join(', ')}`);
     });
 
     await Promise.all(
