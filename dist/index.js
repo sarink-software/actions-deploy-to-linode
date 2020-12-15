@@ -131,6 +131,9 @@ const findOrCreateLinode = async (label, createOptions) => {
             deployUserPublicKey: core.getInput('deploy-user-public-key', { required: true }),
             deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
         };
+        core.setSecret(input.linodePat);
+        core.setSecret(input.linodeRootPass);
+        core.setSecret(input.deployUserPrivateKey);
         api_v4_1.setToken(input.linodePat);
         const linode = await findOrCreateLinode(input.linodeLabel, {
             root_pass: input.linodeRootPass,
