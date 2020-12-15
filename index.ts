@@ -172,7 +172,7 @@ const findOrCreateLinode = async (
       const parsedDomain = parseDomain(domainStr);
       if (parsedDomain.type !== ParseResultType.Listed) throw new Error('Invalid domains string');
       return {
-        name: `${parsedDomain.domain}${parsedDomain.topLevelDomains}`,
+        name: `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`,
         subdomains: parsedDomain.subDomains,
       };
     });
