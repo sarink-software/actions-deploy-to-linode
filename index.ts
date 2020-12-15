@@ -22,7 +22,6 @@ import ora from 'ora';
 import { parseDomain, ParseResultType } from 'parse-domain';
 import shortuuid from 'short-uuid';
 import waitOn from 'wait-on';
-import { linodePat } from './secrets';
 
 const startLoader = (options: ora.Options) => {
   const loader = ora(options);
@@ -140,7 +139,7 @@ const findOrCreateLinode = async (
       deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
     };
 
-    setToken(linodePat);
+    setToken(input.linodePat);
 
     const linode = await findOrCreateLinode(input.linodeLabel, {
       root_pass: input.linodeRootPass,
