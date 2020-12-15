@@ -83,9 +83,6 @@ const findOrCreateLinode = async (label, createOptions) => {
     });
     loader.stop();
     core_1.default.info(`Created new ${logLinode(newLinode)}`);
-    // core.info('Booting...');
-    // await linodeBoot(newLinode.id);
-    // core.info(`New Linode ${logLinode(newLinode)} is up and running!`);
     return newLinode;
 };
 (async () => {
@@ -101,8 +98,10 @@ const findOrCreateLinode = async (label, createOptions) => {
             deployCommand: core_1.default.getInput('deploy-command', { required: true }),
             deployDirectory: core_1.default.getInput('deploy-directory'),
             deployUser: core_1.default.getInput('deploy-user'),
+            deployUserPublicKey: core_1.default.getInput('deploy-user-public-key', { required: true }),
             deployUserPrivateKey: core_1.default.getInput('deploy-user-private-key', { required: true }),
         };
+        input.deployDirectory || (input.deployDirectory = `/home/${input.deployUser}`);
         api_v4_1.setToken(input.linodePat);
         const linode = await findOrCreateLinode(input.linodeLabel, {
             root_pass: input.linodeRootPass,
@@ -111,7 +110,7 @@ const findOrCreateLinode = async (label, createOptions) => {
                     ? fs_1.default.readFileSync(input.linodeAdminUsersFile, 'utf-8')
                     : '[]',
                 deploy_user: input.deployUser,
-                deploy_user_private_key: input.deployUserPrivateKey,
+                deploy_user_public_key: input.deployUserPublicKey,
             },
         });
         const parsedDomains = input.domains.split(',').map((domainStr) => {
