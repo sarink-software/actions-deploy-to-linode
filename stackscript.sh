@@ -1,15 +1,15 @@
-#<UDF name="admin_users_json" Label="JSON array for authorized users" example="[{'username':'name', 'ssh_public_key':'public key' }]" />
-#<UDF name="actions_user" Label="Deploy actions username" example="actions" />
-#<UDF name="actions_key" Label="Deploy actions public ssh key" example="actions" />
+#<UDF name="admin_users_json" Label="JSON array for authorized users" example="[{'user':'name', 'public_key':'ssh-rsa ABC123...' }]" />
+#<UDF name="deploy_user" Label="Deploy user" example="deploy" />
+#<UDF name="deploy_user_public_key" Label="Public SSH key for deploy user" example="ssh-rsa ABC123..." />
 
 # Works for CentOS 7
 # Inspired by: https://raw.githubusercontent.com/mb243/linux-deployment-scripts/master/hardened-CentOS7.sh
 
 # AS root *******************************************
 
-if [[ ! $ADMIN_USERS_JSON ]]; then read -p "JSON array for authorized users, eg [{'user':'name', 'public_key':'ss-rsa ABC123...' }]: " ADMIN_USERS_JSON; fi
-if [[ ! $DEPLOY_USER ]]; then read -p "Deploy username?: " DEPLOY_USER; fi
-if [[ ! $DEPLOY_USER_PUBLIC_KEY ]]; then read -p "Public ssh key for deploy user?: " DEPLOY_USER_PUBLIC_KEY; fi
+if [[ ! $ADMIN_USERS_JSON ]]; then read -p "JSON array for authorized users, eg [{'user':'name', 'public_key':'ssh-rsa ABC123...' }]: " ADMIN_USERS_JSON; fi
+if [[ ! $DEPLOY_USER ]]; then read -p "Deploy user?: " DEPLOY_USER; fi
+if [[ ! $DEPLOY_USER_PUBLIC_KEY ]]; then read -p "Public SSH key for deploy user?: " DEPLOY_USER_PUBLIC_KEY; fi
 
 # Install needfuls
 yum update -y
