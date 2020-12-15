@@ -56,7 +56,7 @@ const findOrCreateDomain = async (domain: Domain['domain'], createOptions: Creat
     return existingDomain;
   }
   const loader = startLoader({ text: 'Creating new Domain...' });
-  core.debug(JSON.stringify(createOptions, null, 2));
+  core.debug(JSON.stringify(createOptions));
   const newDomain = await createDomain({ type: 'master', ...createOptions, domain });
   loader.stop();
   core.info(`Created new ${logDomain(newDomain)}`);
@@ -85,7 +85,7 @@ const updateOrCreateARecord = async (
 
   const newAttrs = { type: 'A' as const, ...attrs };
   const loader = startLoader({ text: 'Creating new Record...' });
-  core.debug(JSON.stringify(newAttrs, null, 2));
+  core.debug(JSON.stringify(newAttrs));
   const newRecord = await createDomainRecord(domainId, newAttrs);
   loader.stop();
   core.info(`Created new ${logRecord(newRecord, domainId)}`);
@@ -110,18 +110,14 @@ const findOrCreateLinode = async (
   }
   const loader = startLoader({ text: 'Creating new Linode...' });
   core.debug(
-    JSON.stringify(
-      {
+    JSON.stringify({
         type: 'g6-nanode-1',
         region: 'us-central',
         stackscript_id: 693032,
         image: 'linode/centos7',
         booted: true,
         ...createOptions,
-      },
-      null,
-      2
-    )
+    })
   );
   const newLinode = await createLinode({
     label,
