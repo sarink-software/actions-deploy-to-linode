@@ -1,6 +1,7 @@
 // Import modules with "* as" https://github.com/vercel/ncc/issues/621
 import * as artifact from '@actions/artifact';
 import * as core from '@actions/core';
+import * as github from '@actions/github';
 import {
   createDomain,
   CreateDomainPayload,
@@ -144,12 +145,10 @@ const findOrCreateLinode = async (
       email: core.getInput('email', { required: true }),
       deployArtifact: core.getInput('deploy-artifact', { required: true }),
       deployCommand: core.getInput('deploy-command', { required: true }),
-      deployDirectory: core.getInput('deploy-directory'),
       deployUser: core.getInput('deploy-user'),
       deployUserPublicKey: core.getInput('deploy-user-public-key', { required: true }),
       deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
     };
-    input.deployDirectory ||= `/home/${input.deployUser}`;
 
     setToken(input.linodePat);
 
@@ -210,6 +209,9 @@ const findOrCreateLinode = async (
     const artifactClient = artifact.create();
     const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
 
+    const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
+    const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${github.context.repo.repo}`;
+
     const ssh = new NodeSSH();
 
     await ssh.connect({
@@ -218,19 +220,19 @@ const findOrCreateLinode = async (
       privateKey: input.deployUserPrivateKey,
     });
 
-    await ssh.putFile(downloadedArtifact.downloadPath, input.deployDirectory);
+    await ssh.putFile(downloadedArtifact.downloadPath, deployDirectory);
 
-    const ps1 = `${input.deployUser}@${linodeHost}:${input.deployDirectory}$`;
+    const ps1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
 
-    core.info(`${ps1} mkdir -p ${input.deployDirectory}`);
-    await ssh.exec('mkdir', ['-p', input.deployDirectory], {
+    core.info(`${ps1} mkdir -p ${deployDirectory}`);
+    await ssh.exec('mkdir', ['-p', deployDirectory], {
       onStdout: (chunk) => core.info(chunk.toString('utf-8')),
       onStderr: (chunk) => core.info(chunk.toString('utf-8')),
     });
 
     core.info(`${ps1} ${input.deployCommand}`);
     await ssh.exec(input.deployCommand, [], {
-      cwd: input.deployDirectory,
+      cwd: deployDirectory,
       onStdout: (chunk) => core.info(chunk.toString('utf-8')),
       onStderr: (chunk) => core.info(chunk.toString('utf-8')),
     });
