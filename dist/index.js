@@ -148,16 +148,13 @@ const findOrCreateLinode = async (label, createOptions) => {
             if (parsedDomain.type !== parse_domain_1.ParseResultType.Listed)
                 throw new Error('Invalid domains string');
             return {
-                name: `${parsedDomain.domain}${parsedDomain.topLevelDomains}`,
+                name: `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`,
                 subdomains: parsedDomain.subDomains,
             };
         });
-        core.debug('');
         core.debug('Parsed domains:');
         parsedDomains.forEach((parsedDomain) => {
-            core.debug(`domain: ${parsedDomain.name}`);
-            core.debug(`subdomains: ${parsedDomain.subdomains.join(', ')}`);
-            core.debug('');
+            core.debug(`domain: ${parsedDomain.name}, subdomains: ${parsedDomain.subdomains.join(', ')}`);
         });
         await Promise.all(parsedDomains.map(async (parsedDomain) => {
             const domain = await findOrCreateDomain(parsedDomain.name, { soa_email: input.email });
