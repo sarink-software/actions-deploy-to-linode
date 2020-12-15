@@ -172,6 +172,11 @@ const findOrCreateLinode = async (label, createOptions) => {
         });
         await ssh.putFile(downloadedArtifact.downloadPath, input.deployDirectory);
         const ps1 = `${input.deployUser}@${firstDomainName}:${input.deployDirectory}$`;
+        core.info(`${ps1} mkdir -p ${input.deployDirectory}`);
+        await ssh.exec('mkdir', ['-p', input.deployDirectory], {
+            onStdout: (chunk) => core.info(chunk.toString('utf-8')),
+            onStderr: (chunk) => core.info(chunk.toString('utf-8')),
+        });
         core.info(`${ps1} ${input.deployCommand}`);
         await ssh.exec(input.deployCommand, [], {
             cwd: input.deployDirectory,
