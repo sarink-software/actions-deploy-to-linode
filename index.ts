@@ -96,7 +96,7 @@ const findOrCreateLinode = async (
     stackscript_data: {
       admin_users_json: string;
       deploy_user: string;
-      deploy_user_private_key: string;
+      deploy_user_public_key: string;
     };
   }
 ) => {
@@ -117,9 +117,6 @@ const findOrCreateLinode = async (
   });
   loader.stop();
   core.info(`Created new ${logLinode(newLinode)}`);
-  // core.info('Booting...');
-  // await linodeBoot(newLinode.id);
-  // core.info(`New Linode ${logLinode(newLinode)} is up and running!`);
   return newLinode;
 };
 
@@ -136,6 +133,7 @@ const findOrCreateLinode = async (
       deployCommand: core.getInput('deploy-command', { required: true }),
       deployDirectory: core.getInput('deploy-directory'),
       deployUser: core.getInput('deploy-user'),
+      deployUserPublicKey: core.getInput('deploy-user-public-key', { required: true }),
       deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
     };
     input.deployDirectory ||= `/home/${input.deployUser}`;
@@ -149,7 +147,7 @@ const findOrCreateLinode = async (
           ? fs.readFileSync(input.linodeAdminUsersFile, 'utf-8')
           : '[]',
         deploy_user: input.deployUser,
-        deploy_user_private_key: input.deployUserPrivateKey,
+        deploy_user_public_key: input.deployUserPublicKey,
       },
     });
 
