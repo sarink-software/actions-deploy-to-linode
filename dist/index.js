@@ -7,12 +7,32 @@ require('./sourcemap-register.js');module.exports =
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const artifact_1 = __importDefault(__webpack_require__(52605));
-const core_1 = __importDefault(__webpack_require__(42186));
+// Import modules with "* as" https://github.com/vercel/ncc/issues/621
+const artifact = __importStar(__webpack_require__(52605));
+const core = __importStar(__webpack_require__(42186));
 const api_v4_1 = __webpack_require__(15008);
 const fs_1 = __importDefault(__webpack_require__(35747));
 const lodash_1 = __webpack_require__(90250);
@@ -36,13 +56,13 @@ const findLinodeByLabel = async (label) => (await api_v4_1.getLinodes()).data.fi
 const findOrCreateDomain = async (domain, createOptions) => {
     const existingDomain = await findDomainByName(domain);
     if (existingDomain) {
-        core_1.default.info(`Using existing ${logDomain(existingDomain)}`);
+        core.info(`Using existing ${logDomain(existingDomain)}`);
         return existingDomain;
     }
     const loader = startLoader({ text: 'Creating new Domain...' });
     const newDomain = await api_v4_1.createDomain({ type: 'master', ...createOptions, domain });
     loader.stop();
-    core_1.default.info(`Created new ${logDomain(newDomain)}`);
+    core.info(`Created new ${logDomain(newDomain)}`);
     return newDomain;
 };
 const updateOrCreateARecord = async (domainId, attrs) => {
@@ -50,25 +70,25 @@ const updateOrCreateARecord = async (domainId, attrs) => {
     const keysToUpdate = Object.keys(attrs);
     const existingRecordNeedsUpdating = existingRecord && keysToUpdate.some((key) => existingRecord[key] !== attrs[key]);
     if (existingRecord && !existingRecordNeedsUpdating) {
-        core_1.default.info(`Using existing ${logRecord(existingRecord, domainId)}`);
+        core.info(`Using existing ${logRecord(existingRecord, domainId)}`);
         return existingRecord;
     }
     if (existingRecord && existingRecordNeedsUpdating) {
         const updatedRecord = await api_v4_1.updateDomainRecord(domainId, existingRecord.id, attrs);
-        core_1.default.info(`Updated ${logRecord(updatedRecord, domainId)}`);
+        core.info(`Updated ${logRecord(updatedRecord, domainId)}`);
         return updatedRecord;
     }
     const loader = startLoader({ text: 'Creating new Record...' });
     const newAttrs = { type: 'A', ...attrs };
     const newRecord = await api_v4_1.createDomainRecord(domainId, newAttrs);
     loader.stop();
-    core_1.default.info(`Created new ${logRecord(newRecord, domainId)}`);
+    core.info(`Created new ${logRecord(newRecord, domainId)}`);
     return newRecord;
 };
 const findOrCreateLinode = async (label, createOptions) => {
     const existingLinode = await findLinodeByLabel(label);
     if (existingLinode) {
-        core_1.default.info(`Using existing ${logLinode(existingLinode)}`);
+        core.info(`Using existing ${logLinode(existingLinode)}`);
         return existingLinode;
     }
     const loader = startLoader({ text: 'Creating new Linode...' });
@@ -82,24 +102,24 @@ const findOrCreateLinode = async (label, createOptions) => {
         ...createOptions,
     });
     loader.stop();
-    core_1.default.info(`Created new ${logLinode(newLinode)}`);
+    core.info(`Created new ${logLinode(newLinode)}`);
     return newLinode;
 };
 (async () => {
     try {
         const input = {
-            linodePat: core_1.default.getInput('linode-pat', { required: true }),
-            linodeLabel: core_1.default.getInput('linode-label', { required: true }),
-            linodeAdminUsersFile: core_1.default.getInput('linode-admin-users-file'),
-            linodeRootPass: core_1.default.getInput('root-pass') || short_uuid_1.default.generate(),
-            domains: core_1.default.getInput('domains', { required: true }),
-            email: core_1.default.getInput('email', { required: true }),
-            deployArtifact: core_1.default.getInput('deploy-artifact', { required: true }),
-            deployCommand: core_1.default.getInput('deploy-command', { required: true }),
-            deployDirectory: core_1.default.getInput('deploy-directory'),
-            deployUser: core_1.default.getInput('deploy-user'),
-            deployUserPublicKey: core_1.default.getInput('deploy-user-public-key', { required: true }),
-            deployUserPrivateKey: core_1.default.getInput('deploy-user-private-key', { required: true }),
+            linodePat: core.getInput('linode-pat', { required: true }),
+            linodeLabel: core.getInput('linode-label', { required: true }),
+            linodeAdminUsersFile: core.getInput('linode-admin-users-file'),
+            linodeRootPass: core.getInput('root-pass') || short_uuid_1.default.generate(),
+            domains: core.getInput('domains', { required: true }),
+            email: core.getInput('email', { required: true }),
+            deployArtifact: core.getInput('deploy-artifact', { required: true }),
+            deployCommand: core.getInput('deploy-command', { required: true }),
+            deployDirectory: core.getInput('deploy-directory'),
+            deployUser: core.getInput('deploy-user'),
+            deployUserPublicKey: core.getInput('deploy-user-public-key', { required: true }),
+            deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
         };
         input.deployDirectory || (input.deployDirectory = `/home/${input.deployUser}`);
         api_v4_1.setToken(input.linodePat);
@@ -126,7 +146,7 @@ const findOrCreateLinode = async (label, createOptions) => {
             const domain = await findOrCreateDomain(parsedDomain.name, { soa_email: input.email });
             const allARecordNames = lodash_1.uniq(['', ...parsedDomain.subdomains]);
             await Promise.all(allARecordNames.map((name) => updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })));
-            core_1.default.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label}`);
+            core.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label}`);
         }));
         const firstDomainName = parsedDomains[0].name;
         const loader = startLoader({
@@ -141,8 +161,8 @@ const findOrCreateLinode = async (label, createOptions) => {
             loader.stop();
             throw e;
         });
-        core_1.default.info(`Success! https://${firstDomainName} is up and running!`);
-        const artifactClient = artifact_1.default.create();
+        core.info(`Success! https://${firstDomainName} is up and running!`);
+        const artifactClient = artifact.create();
         const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
         const ssh = new node_ssh_1.NodeSSH();
         await ssh.connect({
@@ -152,15 +172,15 @@ const findOrCreateLinode = async (label, createOptions) => {
         });
         await ssh.putFile(downloadedArtifact.downloadPath, input.deployDirectory);
         const ps1 = `${input.deployUser}@${firstDomainName}:${input.deployDirectory}$`;
-        core_1.default.info(`${ps1} ${input.deployCommand}`);
+        core.info(`${ps1} ${input.deployCommand}`);
         await ssh.exec(input.deployCommand, [], {
             cwd: input.deployDirectory,
-            onStdout: (chunk) => core_1.default.info(chunk.toString('utf-8')),
-            onStderr: (chunk) => core_1.default.info(chunk.toString('utf-8')),
+            onStdout: (chunk) => core.info(chunk.toString('utf-8')),
+            onStderr: (chunk) => core.info(chunk.toString('utf-8')),
         });
     }
     catch (error) {
-        core_1.default.setFailed(error.message);
+        core.setFailed(error.message);
     }
 })();
 
