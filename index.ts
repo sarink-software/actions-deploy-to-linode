@@ -52,14 +52,13 @@ const findLinodeByLabel = async (label: string) =>
 const findOrCreateDomain = async (domain: Domain['domain'], createOptions: CreateDomainPayload) => {
   const existingDomain = await findDomainByName(domain);
   if (existingDomain) {
-    console.log(`Using existing ${logDomain(existingDomain)}`);
+    core.info(`Using existing ${logDomain(existingDomain)}`);
     return existingDomain;
   }
-
   const loader = startLoader({ text: 'Creating new Domain...' });
   const newDomain = await createDomain({ type: 'master', ...createOptions, domain });
   loader.stop();
-  console.log(`Created new ${logDomain(newDomain)}`);
+  core.info(`Created new ${logDomain(newDomain)}`);
   return newDomain;
 };
 
@@ -73,13 +72,13 @@ const updateOrCreateARecord = async (
     existingRecord && keysToUpdate.some((key) => existingRecord[key] !== attrs[key]);
 
   if (existingRecord && !existingRecordNeedsUpdating) {
-    console.log(`Using existing ${logRecord(existingRecord, domainId)}`);
+    core.info(`Using existing ${logRecord(existingRecord, domainId)}`);
     return existingRecord;
   }
 
   if (existingRecord && existingRecordNeedsUpdating) {
     const updatedRecord = await updateDomainRecord(domainId, existingRecord.id, attrs);
-    console.log(`Updated ${logRecord(updatedRecord, domainId)}`);
+    core.info(`Updated ${logRecord(updatedRecord, domainId)}`);
     return updatedRecord;
   }
 
@@ -87,7 +86,7 @@ const updateOrCreateARecord = async (
   const newAttrs = { type: 'A' as const, ...attrs };
   const newRecord = await createDomainRecord(domainId, newAttrs);
   loader.stop();
-  console.log(`Created new ${logRecord(newRecord, domainId)}`);
+  core.info(`Created new ${logRecord(newRecord, domainId)}`);
   return newRecord;
 };
 
@@ -104,7 +103,7 @@ const findOrCreateLinode = async (
 ) => {
   const existingLinode = await findLinodeByLabel(label);
   if (existingLinode) {
-    console.log(`Using existing ${logLinode(existingLinode)}`);
+    core.info(`Using existing ${logLinode(existingLinode)}`);
     return existingLinode;
   }
   const loader = startLoader({ text: 'Creating new Linode...' });
@@ -118,10 +117,10 @@ const findOrCreateLinode = async (
     ...createOptions,
   });
   loader.stop();
-  console.log(`Created new ${logLinode(newLinode)}`);
-  // console.log('Booting...');
+  core.info(`Created new ${logLinode(newLinode)}`);
+  // core.info('Booting...');
   // await linodeBoot(newLinode.id);
-  // console.log(`New Linode ${logLinode(newLinode)} is up and running!`);
+  // core.info(`New Linode ${logLinode(newLinode)} is up and running!`);
   return newLinode;
 };
 
@@ -130,14 +129,14 @@ const findOrCreateLinode = async (
     const input = {
       linodePat: core.getInput('linode-pat', { required: true }),
       linodeLabel: core.getInput('linode-label', { required: true }),
-      linodeAdminUsersJson: core.getInput('linode-admin-users-json'),
+      linodeAdminUsersFile: core.getInput('linode-admin-users-file'),
       linodeRootPass: core.getInput('root-pass') || shortuuid.generate(),
       domains: core.getInput('domains', { required: true }),
       email: core.getInput('email', { required: true }),
       deployArtifact: core.getInput('deploy-artifact', { required: true }),
       deployCommand: core.getInput('deploy-command', { required: true }),
-      deployDirectory: core.getInput('deploy-directory', { required: true }),
-      deployUser: core.getInput('deploy-user') || 'deploy',
+      deployDirectory: core.getInput('deploy-directory'),
+      deployUser: core.getInput('deploy-user'),
       deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
     };
 
@@ -146,8 +145,8 @@ const findOrCreateLinode = async (
     const linode = await findOrCreateLinode(input.linodeLabel, {
       root_pass: input.linodeRootPass,
       stackscript_data: {
-        admin_users_json: input.linodeAdminUsersJson
-          ? fs.readFileSync(input.linodeAdminUsersJson, 'utf-8')
+        admin_users_json: input.linodeAdminUsersFile
+          ? fs.readFileSync(input.linodeAdminUsersFile, 'utf-8')
           : '[]',
         deploy_user: input.deployUser,
         deploy_user_private_key: input.deployUserPrivateKey,
@@ -172,7 +171,7 @@ const findOrCreateLinode = async (
             updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })
           )
         );
-        console.log(`Successfully linked Domain ${domain.domain} with Linode ${linode.label}`);
+        core.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label}`);
       })
     );
 
@@ -189,7 +188,7 @@ const findOrCreateLinode = async (
       loader.stop();
       throw e;
     });
-    console.log(`Success! https://${firstDomainName} is up and running!`);
+    core.info(`Success! https://${firstDomainName} is up and running!`);
 
     const artifactClient = artifact.create();
     const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
@@ -204,12 +203,15 @@ const findOrCreateLinode = async (
 
     await ssh.putFile(downloadedArtifact.downloadPath, input.deployDirectory);
 
+    const ps1 = `${input.deployUser}@${firstDomainName}:${input.deployDirectory}$`;
+    core.info(`${ps1} ${input.deployCommand}`);
+
     await ssh.exec(input.deployCommand, [], {
       cwd: input.deployDirectory,
-      onStdout: (chunk) => console.log('stdoutChunk', chunk.toString('utf8')),
-      onStderr: (chunk) => console.error('stderrChunk', chunk.toString('utf8')),
+      onStdout: (chunk) => core.info(chunk.toString('utf-8')),
+      onStderr: (chunk) => core.info(chunk.toString('utf-8')),
     });
-  } catch (e) {
-    console.error(e, e.message);
+  } catch (error) {
+    core.setFailed(error.message);
   }
 })();
