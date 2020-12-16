@@ -231,18 +231,19 @@ try {
     const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
     const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${github.context.repo.repo}`;
 
-    const sshExecCommand = (command: string, options?: SSHExecCommandOptions) =>
-      new Promise(async (resolve, reject) => {
-        const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
-        core.info(`${PS1} ${command}`);
-        const resp = await ssh.execCommand(command, {
-          onStdout: (chunk) => core.info(chunk.toString('utf-8')),
-          onStderr: (chunk) => core.info(chunk.toString('utf-8')),
-          ...options,
-        });
-        if (resp.code !== 0) throw new Error(resp.stderr);
-        return resolve(resp);
+    const sshExecCommand = (command: string, options?: SSHExecCommandOptions) => {
+      const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
+      core.info(`${PS1} ${command}`);
+      return ssh.execCommand(command, {
+        onStdout: (chunk) => {
+          core.info(chunk.toString('utf-8'));
+        },
+        onStderr: (chunk) => {
+          throw new Error(chunk.toString('utf-8'));
+        },
+        ...options,
       });
+    };
 
     await sshExecCommand(`mkdir -p ${deployDirectory}`);
     await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDirectory });
