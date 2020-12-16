@@ -190,7 +190,9 @@ const findOrCreateLinode = async (
             updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })
           )
         );
-        core.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label}`);
+        core.info(
+          `Successfully linked Domain ${domain.domain} with Linode ${linode.label} (${linode.ipv4[0]})`
+        );
       })
     );
 
@@ -210,22 +212,24 @@ const findOrCreateLinode = async (
     });
     core.info(`Success! ${linodeUrl} is up and running. Connected domains are: ${input.domains}`);
 
-    const artifactClient = artifact.create();
-    const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
-
-    const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
-    const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${github.context.repo.repo}`;
-
     const ssh = new NodeSSH();
 
+    core.info(`SSHing ${input.deployUser}@${linodeHost}...`);
     await ssh.connect({
       host: linodeHost,
       username: input.deployUser,
       privateKey: input.deployUserPrivateKey,
     });
 
-    const artifactTempFile = `/tmp/${input.deployArtifact}`;
-    await ssh.putFile(downloadedArtifact.downloadPath, artifactTempFile);
+    const artifactClient = artifact.create();
+    const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
+    const localArtifact = `${downloadedArtifact.downloadPath}/${downloadedArtifact.artifactName}`;
+    const remoteArtifact = `/tmp/${downloadedArtifact.artifactName}`;
+    core.info(`Copying artifact ${localArtifact} to ${linodeHost}:${remoteArtifact}...`);
+    await ssh.putFile(localArtifact, remoteArtifact);
+
+    const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
+    const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${github.context.repo.repo}`;
 
     const sshExecCommand = (command: string, options?: SSHExecCommandOptions) => {
       const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
@@ -236,10 +240,9 @@ const findOrCreateLinode = async (
         ...options,
       });
     };
-
     await sshExecCommand(`mkdir -p ${deployDirectory}`);
     await sshExecCommand(`rm -rf ..?* .[!.]* *`, { cwd: deployDirectory });
-    await sshExecCommand(`mv -v ${artifactTempFile} ${deployDirectory}`, { cwd: deployDirectory });
+    await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
     await sshExecCommand(`tar -xzvf ${input.deployArtifact}`, { cwd: deployDirectory });
     await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
   } catch (error) {
