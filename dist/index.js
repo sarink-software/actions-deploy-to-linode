@@ -195,7 +195,7 @@ try {
         await ssh.putFile(localArtifact, remoteArtifact);
         const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
         const REPO_NAME = github.context.repo.repo;
-        const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${input.appEnv}`;
+        const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${REPO_NAME}-${input.appEnv}`;
         const sshExecCommand = (command, options) => {
             const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
             core.info(`${PS1} ${command}`);
@@ -213,10 +213,7 @@ try {
         await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDirectory });
         await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
         await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDirectory });
-        const [leafDeployDirectoryName] = deployDirectory.split('/').reverse();
-        const composeProjectName = `${REPO_NAME}-${leafDeployDirectoryName}`;
-        const deployCommand = `(export COMPOSE_PROJECT_NAME="${composeProjectName}"; ${input.deployCommand})`;
-        await sshExecCommand(deployCommand, { cwd: deployDirectory });
+        await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
     })();
 }
 catch (error) {
