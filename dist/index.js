@@ -119,6 +119,7 @@ const findOrCreateLinode = async (label, createOptions) => {
 try {
     (async () => {
         const input = {
+            appEnv: core.getInput('app-env', { required: true }),
             linodePat: core.getInput('linode-pat', { required: true }),
             linodeLabel: core.getInput('linode-label', { required: true }),
             linodeAdminUsersFile: core.getInput('linode-admin-users-file'),
@@ -212,7 +213,8 @@ try {
         await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDirectory });
         await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
         await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDirectory });
-        const deployCommand = `(export COMPOSE_PROJECT_NAME="${REPO_NAME}"; ${input.deployCommand})`;
+        const composeProjectName = `${REPO_NAME}-${input.appEnv}`;
+        const deployCommand = `(export COMPOSE_PROJECT_NAME="${composeProjectName}"; ${input.deployCommand})`;
         await sshExecCommand(deployCommand, { cwd: deployDirectory });
     })();
 }
