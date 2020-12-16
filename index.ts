@@ -237,12 +237,8 @@ try {
       const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
       core.info(`${PS1} ${command}`);
       return ssh.execCommand(command, {
-        onStdout: (chunk) => {
-          core.info(chunk.toString('utf-8'));
-        },
-        onStderr: (chunk) => {
-          throw new Error(chunk.toString('utf-8'));
-        },
+        onStdout: (chunk) => core.info(chunk.toString('utf-8')),
+        onStderr: (chunk) => core.error(chunk.toString('utf-8')),
         ...options,
       });
     };
