@@ -13,7 +13,7 @@ if [[ ! $DEPLOY_USER_PUBLIC_KEY ]]; then read -p "Public SSH key for deploy user
 
 # Install needfuls
 yum update -y
-yum install -y epel-release
+yum install -y epel-release tree vim
 yum update -y
 
 # Install jq for parsing admin users json
