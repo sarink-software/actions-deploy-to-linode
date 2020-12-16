@@ -134,8 +134,8 @@ const findOrCreateLinode = async (
   return newLinode;
 };
 
-(async () => {
-  try {
+try {
+  (async () => {
     const input = {
       linodePat: core.getInput('linode-pat', { required: true }),
       linodeLabel: core.getInput('linode-label', { required: true }),
@@ -248,7 +248,7 @@ const findOrCreateLinode = async (
     await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
     await sshExecCommand(`tar -xzvf ${input.deployArtifact}`, { cwd: deployDirectory });
     await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
-  } catch (error) {
-    core.setFailed(error.message);
-  }
-})();
+  })();
+} catch (error) {
+  core.setFailed(error.message);
+}
