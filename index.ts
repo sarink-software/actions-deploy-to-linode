@@ -238,7 +238,9 @@ try {
       core.info(`${PS1} ${command}`);
       return ssh.execCommand(command, {
         onStdout: (chunk) => core.info(chunk.toString('utf-8')),
-        onStderr: (chunk) => core.error(chunk.toString('utf-8')),
+        onStderr: (chunk) =>
+          // A lot of docker commands log to stderr, despite not being errors
+          core[command.includes('docker') ? 'info' : 'error'](chunk.toString('utf-8')),
         ...options,
       });
     };
@@ -247,8 +249,9 @@ try {
     await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
     await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDirectory });
     await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
+
+    ssh.dispose();
   })();
 } catch (error) {
   core.setFailed(error.message);
-  throw error;
 }
