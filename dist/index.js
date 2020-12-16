@@ -210,7 +210,7 @@ try {
         await sshExecCommand(`mkdir -p ${deployDirectory}`);
         await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDirectory });
         await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
-        await sshExecCommand(`tar -xzvf ${input.deployArtifact}`, { cwd: deployDirectory });
+        await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDirectory });
         await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
     })();
 }
