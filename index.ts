@@ -251,4 +251,5 @@ try {
   })();
 } catch (error) {
   core.setFailed(error.message);
+  throw error;
 }
