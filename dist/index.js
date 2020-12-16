@@ -194,17 +194,18 @@ const findOrCreateLinode = async (label, createOptions) => {
         await ssh.putFile(localArtifact, remoteArtifact);
         const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
         const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${github.context.repo.repo}`;
-        const sshExecCommand = (command, options) => {
+        const sshExecCommand = (command, options) => new Promise(async (resolve, reject) => {
             const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
             core.info(`${PS1} ${command}`);
-            return ssh.execCommand(command, {
+            const { code } = await ssh.execCommand(command, {
                 onStdout: (chunk) => core.info(chunk.toString('utf-8')),
                 onStderr: (chunk) => core.info(chunk.toString('utf-8')),
                 ...options,
             });
-        };
+            return code === 0 ? resolve(code) : reject(code);
+        });
         await sshExecCommand(`mkdir -p ${deployDirectory}`);
-        await sshExecCommand(`rm -rf ..?* .[!.]* *`, { cwd: deployDirectory });
+        await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDirectory });
         await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
         await sshExecCommand(`tar -xzvf ${input.deployArtifact}`, { cwd: deployDirectory });
         await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
