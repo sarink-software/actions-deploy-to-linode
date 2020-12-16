@@ -1,6 +1,9 @@
 name: Create build artifact
 
 inputs:
+  app-env:
+    required: true
+
   linode-pat:
     required: true
 
