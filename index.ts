@@ -235,12 +235,13 @@ try {
       new Promise(async (resolve, reject) => {
         const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
         core.info(`${PS1} ${command}`);
-        const { code } = await ssh.execCommand(command, {
+        const resp = await ssh.execCommand(command, {
           onStdout: (chunk) => core.info(chunk.toString('utf-8')),
           onStderr: (chunk) => core.info(chunk.toString('utf-8')),
           ...options,
         });
-        return code === 0 ? resolve(code) : reject(code);
+        if (resp.code !== 0) throw new Error(resp.stderr);
+        return resolve(resp);
       });
 
     await sshExecCommand(`mkdir -p ${deployDirectory}`);
