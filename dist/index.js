@@ -193,7 +193,8 @@ try {
         core.info(`Copying artifact ${localArtifact} to ${linodeHost}:${remoteArtifact}...`);
         await ssh.putFile(localArtifact, remoteArtifact);
         const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
-        const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${github.context.repo.repo}`;
+        const REPO_NAME = github.context.repo.repo;
+        const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}`;
         const sshExecCommand = (command, options) => {
             const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
             core.info(`${PS1} ${command}`);
@@ -211,7 +212,8 @@ try {
         await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDirectory });
         await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
         await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDirectory });
-        await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
+        const deployCommand = `(export COMPOSE_PROJECT_NAME="${REPO_NAME}"; ${input.deployCommand})`;
+        await sshExecCommand(deployCommand, { cwd: deployDirectory });
     })();
 }
 catch (error) {
