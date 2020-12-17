@@ -50,19 +50,19 @@ const startLoader = (options) => {
 const logRecord = (record, domainId) => `${record.type} Record: '${record.name}' (${record.id}) with target: ${record.target} for Domain: ${domainId}`;
 const logDomain = (domain) => `Domain: ${domain.domain} (${domain.id})`;
 const logLinode = (linode) => `Linode: ${linode.label}@${linode.ipv4[0]} (${linode.id})`;
-const findDomainByName = async (domain) => (await api_v4_1.getDomains()).data.find((d) => d.domain === domain);
+const findDomainByName = async (name) => (await api_v4_1.getDomains()).data.find((d) => d.domain === name);
 const findRecordForDomain = async (domainId, findOptions) => lodash_1.find((await api_v4_1.getDomainRecords(domainId)).data, findOptions);
 const findLinodeByIp = async (ipv4) => (await api_v4_1.getLinodes()).data.find((linode) => linode.ipv4.includes(ipv4));
 const findLinodeByLabel = async (label) => (await api_v4_1.getLinodes()).data.find((linode) => linode.label === label);
-const findOrCreateDomain = async (domain, createOptions) => {
-    const existingDomain = await findDomainByName(domain);
+const findOrCreateDomain = async (name, createOptions) => {
+    const existingDomain = await findDomainByName(name);
     if (existingDomain) {
         core.info(`Using existing ${logDomain(existingDomain)}`);
         return existingDomain;
     }
     const loader = startLoader({ text: 'Creating new Domain...' });
     core.debug(JSON.stringify(createOptions));
-    const newDomain = await api_v4_1.createDomain({ type: 'master', ...createOptions, domain });
+    const newDomain = await api_v4_1.createDomain({ type: 'master', ...createOptions, domain: name });
     loader.stop();
     core.info(`Created new ${logDomain(newDomain)}`);
     return newDomain;
@@ -146,22 +146,21 @@ try {
                 deploy_user_public_key: input.deployUserPublicKey,
             },
         });
-        const parsedDomains = input.domains.split(',').map((domainStr) => {
+        const parsedDomains = input.domains.split(',').reduce((accDomains, domainStr) => {
             const parsedDomain = parse_domain_1.parseDomain(domainStr);
             if (parsedDomain.type !== parse_domain_1.ParseResultType.Listed)
                 throw new Error('Invalid domains string');
-            return {
-                name: `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`,
-                subdomains: parsedDomain.subDomains,
-            };
-        });
+            const name = `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`;
+            const subdomains = lodash_1.uniq([...(accDomains[name] || []), ...parsedDomain.subDomains]);
+            return { ...accDomains, [name]: subdomains };
+        }, {});
         core.debug('Parsed domains:');
-        parsedDomains.forEach((parsedDomain) => {
-            core.debug(`domain: ${parsedDomain.name}, subdomains: ${parsedDomain.subdomains.join(', ')}`);
+        Object.entries(parsedDomains).forEach(([name, subdomains]) => {
+            core.debug(`domain: ${name}, subdomains: ${subdomains.join(', ')}`);
         });
-        await Promise.all(parsedDomains.map(async (parsedDomain) => {
-            const domain = await findOrCreateDomain(parsedDomain.name, { soa_email: input.email });
-            const allARecordNames = lodash_1.uniq(['', ...parsedDomain.subdomains]);
+        await Promise.all(Object.entries(parsedDomains).map(async ([name, subdomains]) => {
+            const domain = await findOrCreateDomain(name, { soa_email: input.email });
+            const allARecordNames = lodash_1.uniq(['', ...subdomains]);
             await Promise.all(allARecordNames.map((name) => updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })));
             core.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label} (${linode.ipv4[0]})`);
         }));
