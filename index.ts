@@ -38,8 +38,8 @@ const logDomain = (domain: Domain) => `Domain: ${domain.domain} (${domain.id})`;
 
 const logLinode = (linode: Linode) => `Linode: ${linode.label}@${linode.ipv4[0]} (${linode.id})`;
 
-const findDomainByName = async (domain: Domain['domain']) =>
-  (await getDomains()).data.find((d) => d.domain === domain);
+const findDomainByName = async (name: Domain['domain']) =>
+  (await getDomains()).data.find((d) => d.domain === name);
 
 const findRecordForDomain = async (domainId: Domain['id'], findOptions: Partial<DomainRecord>) =>
   find((await getDomainRecords(domainId)).data, findOptions);
@@ -50,15 +50,15 @@ const findLinodeByIp = async (ipv4: string) =>
 const findLinodeByLabel = async (label: string) =>
   (await getLinodes()).data.find((linode) => linode.label === label);
 
-const findOrCreateDomain = async (domain: Domain['domain'], createOptions: CreateDomainPayload) => {
-  const existingDomain = await findDomainByName(domain);
+const findOrCreateDomain = async (name: Domain['domain'], createOptions: CreateDomainPayload) => {
+  const existingDomain = await findDomainByName(name);
   if (existingDomain) {
     core.info(`Using existing ${logDomain(existingDomain)}`);
     return existingDomain;
   }
   const loader = startLoader({ text: 'Creating new Domain...' });
   core.debug(JSON.stringify(createOptions));
-  const newDomain = await createDomain({ type: 'master', ...createOptions, domain });
+  const newDomain = await createDomain({ type: 'master', ...createOptions, domain: name });
   loader.stop();
   core.info(`Created new ${logDomain(newDomain)}`);
   return newDomain;
