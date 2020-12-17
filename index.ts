@@ -168,24 +168,23 @@ try {
       },
     });
 
-    const parsedDomains = input.domains.split(',').map((domainStr) => {
+    const parsedDomains = input.domains.split(',').reduce((accDomains, domainStr) => {
       const parsedDomain = parseDomain(domainStr);
       if (parsedDomain.type !== ParseResultType.Listed) throw new Error('Invalid domains string');
-      return {
-        name: `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`,
-        subdomains: parsedDomain.subDomains,
-      };
-    });
+      const name = `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`;
+      const subdomains = uniq([...(accDomains[name] || []), ...parsedDomain.subDomains]);
+      return { ...accDomains, [name]: subdomains };
+    }, {} as Record<string, string[]>);
 
     core.debug('Parsed domains:');
-    parsedDomains.forEach((parsedDomain) => {
-      core.debug(`domain: ${parsedDomain.name}, subdomains: ${parsedDomain.subdomains.join(', ')}`);
+    Object.entries(parsedDomains).forEach(([name, subdomains]) => {
+      core.debug(`domain: ${name}, subdomains: ${subdomains.join(', ')}`);
     });
 
     await Promise.all(
-      parsedDomains.map(async (parsedDomain) => {
-        const domain = await findOrCreateDomain(parsedDomain.name, { soa_email: input.email });
-        const allARecordNames = uniq(['', ...parsedDomain.subdomains]);
+      Object.entries(parsedDomains).map(async ([name, subdomains]) => {
+        const domain = await findOrCreateDomain(name, { soa_email: input.email });
+        const allARecordNames = uniq(['', ...subdomains]);
         await Promise.all(
           allARecordNames.map((name) =>
             updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })
