@@ -282,6 +282,7 @@ try {
       await sshExecCommand(input.deployCommand, { cwd: deployDir });
       throw e;
     } finally {
+      core.info('Cleaning up...');
       await sshExecCommand(`rm -${v}rf "${remoteArtifact}" "${newStagingDir}" "${backupDir}"`);
       ssh.dispose();
     }
