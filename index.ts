@@ -243,8 +243,12 @@ try {
           // A lot of docker commands log to stderr, despite not being errors
           const chunkStr = chunk.toString('utf-8');
           const ignoreError =
-            command.includes('docker') && !chunkStr.toLowerCase().startsWith('error');
-          core[ignoreError ? 'info' : 'error'](chunkStr);
+            command.includes('docker') && !chunkStr.toLowerCase().includes('error');
+          if (ignoreError) {
+            core.info(chunkStr);
+          } else {
+            throw new Error(chunkStr);
+          }
         },
         ...options,
       });
