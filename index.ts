@@ -248,7 +248,7 @@ try {
           const chunkStr = chunk.toString('utf-8');
           const ignoreError = cmd.includes('docker') && !chunkStr.toLowerCase().includes('error');
           if (ignoreError) {
-            core.info(chunkStr);
+            core.info(`ERROR: ${chunkStr}`);
           } else {
             core.error(chunkStr);
             errors.push(chunkStr);
