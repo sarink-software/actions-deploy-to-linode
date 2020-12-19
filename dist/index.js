@@ -194,24 +194,53 @@ try {
         await ssh.putFile(localArtifact, remoteArtifact);
         const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
         const REPO_NAME = github.context.repo.repo;
-        const deployDirectory = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${REPO_NAME}-${input.appEnv}`;
-        const sshExecCommand = (command, options) => {
-            const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
+        const deployDir = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${REPO_NAME}-${input.appEnv}`;
+        const rollbackDir = `${deployDir}-old`;
+        const sshExecCommand = async (command, options) => {
+            const PS1 = `${input.deployUser}@${linodeHost}:${(options === null || options === void 0 ? void 0 : options.cwd) || ''}$`;
             core.info(`${PS1} ${command}`);
-            return ssh.execCommand(command, {
-                onStdout: (chunk) => core.info(chunk.toString('utf-8')),
-                onStderr: (chunk) => 
-                // A lot of docker commands log to stderr, despite not being errors
-                core[command.includes('docker') ? 'info' : 'error'](chunk.toString('utf-8')),
+            const errors = [];
+            const resp = await ssh.execCommand(command, {
+                onStdout: (chunk) => {
+                    core.info(chunk.toString('utf-8'));
+                },
+                onStderr: (chunk) => {
+                    // A lot of docker commands log to stderr, despite not being errors
+                    const chunkStr = chunk.toString('utf-8');
+                    const ignoreError = command.includes('docker') && !chunkStr.toLowerCase().includes('error');
+                    if (ignoreError) {
+                        core.info(chunkStr);
+                    }
+                    else {
+                        core.error(chunkStr);
+                        errors.push(chunkStr);
+                    }
+                },
                 ...options,
             });
+            if (errors.length > 0)
+                throw new Error(errors.join('\n'));
+            return resp;
         };
-        await sshExecCommand(`mkdir -p ${deployDirectory}`);
-        await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDirectory });
-        await sshExecCommand(`mv -v ${remoteArtifact} ${deployDirectory}`, { cwd: deployDirectory });
-        await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDirectory });
-        await sshExecCommand(input.deployCommand, { cwd: deployDirectory });
-        ssh.dispose();
+        await sshExecCommand(`mkdir -p ${deployDir}`);
+        await sshExecCommand(`cp -rvT ${deployDir} ${rollbackDir}`);
+        try {
+            core.info('Deploying...');
+            await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDir });
+            await sshExecCommand(`mv -v ${remoteArtifact} ${deployDir}`, { cwd: deployDir });
+            await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDir });
+            await sshExecCommand(input.deployCommand, { cwd: deployDir });
+        }
+        catch (e) {
+            core.info('Rolling back...');
+            await sshExecCommand(`rm -rfv ${deployDir}`);
+            await sshExecCommand(`cp -rvT ${rollbackDir} ${deployDir}`);
+            await sshExecCommand(input.deployCommand, { cwd: deployDir });
+            throw e;
+        }
+        finally {
+            ssh.dispose();
+        }
     })();
 }
 catch (error) {
