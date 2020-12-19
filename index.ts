@@ -149,6 +149,7 @@ try {
       deployUser: core.getInput('deploy-user'),
       deployUserPublicKey: core.getInput('deploy-user-public-key', { required: true }),
       deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
+      healthcheckUrls: core.getInput('healthcheck-urls') || '',
     };
 
     core.setSecret(input.linodePat);
@@ -202,6 +203,7 @@ try {
       text: `Waiting for new Linode to initialize (checking ${linodeUrl})...`,
     });
     await waitOn({
+      log: core.isDebug(),
       resources: [linodeUrl],
       interval: 10 * 1000,
       timeout: 10 * 60 * 1000,
@@ -268,6 +270,16 @@ try {
       await sshExecCommand(`rm -${v}rf "${deployDir}"`);
       await sshExecCommand(`mv -v "${newStagingDir}" "${deployDir}"`);
       await sshExecCommand(input.deployCommand, { cwd: deployDir });
+
+      core.info('Performing healthcheck...');
+      await waitOn({
+        log: core.isDebug(),
+        resources: input.healthcheckUrls.split(','),
+        interval: 3 * 1000,
+        followRedirect: true,
+        timeout: 2 * 60 * 1000,
+        validateStatus: (status) => status === 200,
+      });
     } catch (e) {
       core.info('Rolling back...');
       await sshExecCommand(`rm -${v}rf "${deployDir}"`);

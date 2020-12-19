@@ -41,6 +41,9 @@ inputs:
   deploy-user-public-key:
     required: true
 
+  healthcheck-urls:
+    required: false
+
 runs:
   using: node12
   main: dist/index.js
