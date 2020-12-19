@@ -223,29 +223,30 @@ try {
 
     const artifactClient = artifact.create();
     const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
-    const localArtifact = `${downloadedArtifact.downloadPath}/${downloadedArtifact.artifactName}`;
-    const remoteArtifact = `/tmp/${downloadedArtifact.artifactName}`;
+    const { downloadPath, artifactName } = downloadedArtifact;
+    const localArtifact = `${downloadPath}/${artifactName}`;
+    const remoteArtifact = `/tmp/deploy/${downloadedArtifact.artifactName}`;
     core.info(`Copying artifact ${localArtifact} to ${linodeHost}:${remoteArtifact}...`);
     await ssh.putFile(localArtifact, remoteArtifact);
 
     const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
     const REPO_NAME = github.context.repo.repo;
     const deployDir = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${REPO_NAME}-${input.appEnv}`;
-    const backupDir = `${deployDir}-backup`;
+    const newStagingDir = `/tmp/deploy/${REPO_NAME}-${input.appEnv}-new-staging`;
+    const backupDir = `/tmp/deploy/${REPO_NAME}-${input.appEnv}-backup`;
 
-    const sshExecCommand = async (command: string, options?: SSHExecCommandOptions) => {
-      const PS1 = `${input.deployUser}@${linodeHost}:${options?.cwd || ''}$`;
-      core.info(`${PS1} ${command}`);
+    const sshExecCommand = async (cmd: string, options?: SSHExecCommandOptions) => {
+      const PS1 = `${input.deployUser}@${linodeHost}:${options?.cwd || '/'}$`;
+      core.info(`${PS1} ${cmd}`);
       const errors: string[] = [];
-      const resp = await ssh.execCommand(command, {
+      const resp = await ssh.execCommand(cmd, {
         onStdout: (chunk) => {
           core.info(chunk.toString('utf-8'));
         },
         onStderr: (chunk) => {
           // A lot of docker commands log to stderr, despite not being errors
           const chunkStr = chunk.toString('utf-8');
-          const ignoreError =
-            command.includes('docker') && !chunkStr.toLowerCase().includes('error');
+          const ignoreError = cmd.includes('docker') && !chunkStr.toLowerCase().includes('error');
           if (ignoreError) {
             core.info(chunkStr);
           } else {
@@ -259,24 +260,29 @@ try {
       return resp;
     };
 
-    await sshExecCommand(`mkdir -p ${deployDir}`);
+    const v = core.isDebug() ? 'v' : '';
 
     core.info('Creating backup...');
-    await sshExecCommand(`cp -rvT ${deployDir} ${backupDir}`);
+    await sshExecCommand(`mkdir -p "${deployDir}"`);
+    await sshExecCommand(`rm -${v}rf "${backupDir}"`);
+    await sshExecCommand(`cp -${v}arT "${deployDir}" "${backupDir}"`);
 
     try {
       core.info('Deploying...');
-      await sshExecCommand(`rm -rfv ..?* .[!.]* *`, { cwd: deployDir });
-      await sshExecCommand(`mv -v ${remoteArtifact} ${deployDir}`, { cwd: deployDir });
-      await sshExecCommand(`tar -xzvf ${downloadedArtifact.artifactName}`, { cwd: deployDir });
+      await sshExecCommand(`mkdir -p "${newStagingDir}"`);
+      await sshExecCommand(`mv -v "${remoteArtifact}" "${newStagingDir}/"`);
+      await sshExecCommand(`tar -${v}xzf "${artifactName}"`, { cwd: newStagingDir });
+      await sshExecCommand(`rm -${v}rf "${deployDir}"`);
+      await sshExecCommand(`mv -v "${newStagingDir}" "${deployDir}"`);
       await sshExecCommand(input.deployCommand, { cwd: deployDir });
     } catch (e) {
       core.info('Rolling back...');
-      await sshExecCommand(`rm -rfv ${deployDir}`);
-      await sshExecCommand(`cp -rvT ${backupDir} ${deployDir}`);
+      await sshExecCommand(`rm -${v}rf "${deployDir}"`);
+      await sshExecCommand(`mv -v "${backupDir}" "${deployDir}"`);
       await sshExecCommand(input.deployCommand, { cwd: deployDir });
       throw e;
     } finally {
+      await sshExecCommand(`rm -${v}rf "${remoteArtifact}" "${newStagingDir}" "${backupDir}"`);
       ssh.dispose();
     }
   })();
