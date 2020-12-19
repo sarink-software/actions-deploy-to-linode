@@ -244,15 +244,8 @@ try {
           core.info(chunk.toString('utf-8'));
         },
         onStderr: (chunk) => {
-          // A lot of docker commands log to stderr, despite not being errors
-          const chunkStr = chunk.toString('utf-8');
-          const ignoreError = cmd.includes('docker') && !chunkStr.toLowerCase().includes('error');
-          if (ignoreError) {
-            core.info(`ERROR: ${chunkStr}`);
-          } else {
-            core.error(chunkStr);
-            errors.push(chunkStr);
-          }
+          core.error(chunk.toString('utf-8'));
+          errors.push(chunk.toString('utf-8'));
         },
         ...options,
       });
