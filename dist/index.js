@@ -116,144 +116,147 @@ const findOrCreateLinode = async (label, createOptions) => {
     core.info(`Created new ${logLinode(newLinode)}`);
     return newLinode;
 };
-try {
-    (async () => {
-        const input = {
-            appEnv: core.getInput('app-env', { required: true }),
-            linodePat: core.getInput('linode-pat', { required: true }),
-            linodeLabel: core.getInput('linode-label', { required: true }),
-            linodeAdminUsersFile: core.getInput('linode-admin-users-file'),
-            linodeRootPass: core.getInput('root-pass') || short_uuid_1.default.generate(),
-            domains: core.getInput('domains', { required: true }),
-            email: core.getInput('email', { required: true }),
-            deployArtifact: core.getInput('deploy-artifact', { required: true }),
-            deployCommand: core.getInput('deploy-command', { required: true }),
-            deployUser: core.getInput('deploy-user'),
-            deployUserPublicKey: core.getInput('deploy-user-public-key', { required: true }),
-            deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
-        };
-        core.setSecret(input.linodePat);
-        core.setSecret(input.linodeRootPass);
-        core.setSecret(input.deployUserPrivateKey);
-        api_v4_1.setToken(input.linodePat);
-        const linode = await findOrCreateLinode(input.linodeLabel, {
-            root_pass: input.linodeRootPass,
-            stackscript_data: {
-                admin_users_json: input.linodeAdminUsersFile
-                    ? fs_1.default.readFileSync(input.linodeAdminUsersFile, 'utf-8')
-                    : '[]',
-                deploy_user: input.deployUser,
-                deploy_user_public_key: input.deployUserPublicKey,
+(async () => {
+    const input = {
+        appEnv: core.getInput('app-env', { required: true }),
+        linodePat: core.getInput('linode-pat', { required: true }),
+        linodeLabel: core.getInput('linode-label', { required: true }),
+        linodeAdminUsersFile: core.getInput('linode-admin-users-file'),
+        linodeRootPass: core.getInput('root-pass') || short_uuid_1.default.generate(),
+        domains: core.getInput('domains', { required: true }),
+        email: core.getInput('email', { required: true }),
+        deployArtifact: core.getInput('deploy-artifact', { required: true }),
+        deployCommand: core.getInput('deploy-command', { required: true }),
+        deployUser: core.getInput('deploy-user'),
+        deployUserPublicKey: core.getInput('deploy-user-public-key', { required: true }),
+        deployUserPrivateKey: core.getInput('deploy-user-private-key', { required: true }),
+        healthcheckUrls: core.getInput('healthcheck-urls') || '',
+    };
+    core.setSecret(input.linodePat);
+    core.setSecret(input.linodeRootPass);
+    core.setSecret(input.deployUserPrivateKey);
+    api_v4_1.setToken(input.linodePat);
+    const linode = await findOrCreateLinode(input.linodeLabel, {
+        root_pass: input.linodeRootPass,
+        stackscript_data: {
+            admin_users_json: input.linodeAdminUsersFile
+                ? fs_1.default.readFileSync(input.linodeAdminUsersFile, 'utf-8')
+                : '[]',
+            deploy_user: input.deployUser,
+            deploy_user_public_key: input.deployUserPublicKey,
+        },
+    });
+    const parsedDomains = input.domains.split(',').reduce((accDomains, domainStr) => {
+        const parsedDomain = parse_domain_1.parseDomain(domainStr);
+        if (parsedDomain.type !== parse_domain_1.ParseResultType.Listed)
+            throw new Error('Invalid domains string');
+        const name = `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`;
+        const subdomains = lodash_1.uniq([...(accDomains[name] || []), ...parsedDomain.subDomains]);
+        return { ...accDomains, [name]: subdomains };
+    }, {});
+    core.debug('Parsed domains:');
+    Object.entries(parsedDomains).forEach(([name, subdomains]) => {
+        core.debug(`domain: ${name}, subdomains: ${subdomains.join(', ')}`);
+    });
+    await Promise.all(Object.entries(parsedDomains).map(async ([name, subdomains]) => {
+        const domain = await findOrCreateDomain(name, { soa_email: input.email });
+        const allARecordNames = lodash_1.uniq(['', ...subdomains]);
+        await Promise.all(allARecordNames.map((name) => updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })));
+        core.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label} (${linode.ipv4[0]})`);
+    }));
+    const linodeHost = linode.ipv4[0];
+    const linodeUrl = `http://${linodeHost}`;
+    const loader = startLoader({
+        text: `Waiting for new Linode to initialize (checking ${linodeUrl})...`,
+    });
+    await wait_on_1.default({
+        log: core.isDebug(),
+        resources: [linodeUrl],
+        interval: 10 * 1000,
+        timeout: 10 * 60 * 1000,
+        validateStatus: (status) => status >= 200 && status <= 503,
+    }).catch((e) => {
+        loader.stop();
+        throw e;
+    });
+    core.info(`Success! ${linodeUrl} is up and running. Connected domains are: ${input.domains}`);
+    const ssh = new node_ssh_1.NodeSSH();
+    core.info(`SSHing ${input.deployUser}@${linodeHost}...`);
+    await ssh.connect({
+        host: linodeHost,
+        username: input.deployUser,
+        privateKey: input.deployUserPrivateKey,
+    });
+    const artifactClient = artifact.create();
+    const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
+    const { downloadPath, artifactName } = downloadedArtifact;
+    const localArtifact = `${downloadPath}/${artifactName}`;
+    const remoteArtifact = `/tmp/deploy/${downloadedArtifact.artifactName}`;
+    core.info(`Copying artifact ${localArtifact} to ${linodeHost}:${remoteArtifact}...`);
+    await ssh.putFile(localArtifact, remoteArtifact);
+    const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
+    const REPO_NAME = github.context.repo.repo;
+    const deployDir = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${REPO_NAME}-${input.appEnv}`;
+    const newStagingDir = `/tmp/deploy/${REPO_NAME}-${input.appEnv}-new-staging`;
+    const backupDir = `/tmp/deploy/${REPO_NAME}-${input.appEnv}-backup`;
+    const sshExecCommand = async (cmd, options) => {
+        const PS1 = `${input.deployUser}@${linodeHost}:${(options === null || options === void 0 ? void 0 : options.cwd) || '/'}$`;
+        core.info(`${PS1} ${cmd}`);
+        const errors = [];
+        const resp = await ssh.execCommand(cmd, {
+            onStdout: (chunk) => {
+                core.info(chunk.toString('utf-8'));
             },
+            onStderr: (chunk) => {
+                core.error(chunk.toString('utf-8'));
+                errors.push(chunk.toString('utf-8'));
+            },
+            ...options,
         });
-        const parsedDomains = input.domains.split(',').reduce((accDomains, domainStr) => {
-            const parsedDomain = parse_domain_1.parseDomain(domainStr);
-            if (parsedDomain.type !== parse_domain_1.ParseResultType.Listed)
-                throw new Error('Invalid domains string');
-            const name = `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`;
-            const subdomains = lodash_1.uniq([...(accDomains[name] || []), ...parsedDomain.subDomains]);
-            return { ...accDomains, [name]: subdomains };
-        }, {});
-        core.debug('Parsed domains:');
-        Object.entries(parsedDomains).forEach(([name, subdomains]) => {
-            core.debug(`domain: ${name}, subdomains: ${subdomains.join(', ')}`);
-        });
-        await Promise.all(Object.entries(parsedDomains).map(async ([name, subdomains]) => {
-            const domain = await findOrCreateDomain(name, { soa_email: input.email });
-            const allARecordNames = lodash_1.uniq(['', ...subdomains]);
-            await Promise.all(allARecordNames.map((name) => updateOrCreateARecord(domain.id, { name, target: linode.ipv4[0] })));
-            core.info(`Successfully linked Domain ${domain.domain} with Linode ${linode.label} (${linode.ipv4[0]})`);
-        }));
-        const linodeHost = linode.ipv4[0];
-        const linodeUrl = `http://${linodeHost}`;
-        const loader = startLoader({
-            text: `Waiting for new Linode to initialize (checking ${linodeUrl})...`,
-        });
+        if (errors.length > 0)
+            throw new Error(errors.join('\n'));
+        return resp;
+    };
+    const v = core.isDebug() ? 'v' : '';
+    core.info('Creating backup...');
+    await sshExecCommand(`mkdir -p "${deployDir}"`);
+    await sshExecCommand(`rm -${v}rf "${backupDir}"`);
+    await sshExecCommand(`cp -${v}arT "${deployDir}" "${backupDir}"`);
+    try {
+        core.info('Deploying...');
+        await sshExecCommand(`mkdir -p "${newStagingDir}"`);
+        await sshExecCommand(`mv -v "${remoteArtifact}" "${newStagingDir}/"`);
+        await sshExecCommand(`tar -${v}xzf "${artifactName}"`, { cwd: newStagingDir });
+        await sshExecCommand(`rm -${v}rf "${deployDir}"`);
+        await sshExecCommand(`mv -v "${newStagingDir}" "${deployDir}"`);
+        await sshExecCommand(input.deployCommand, { cwd: deployDir });
+        core.info('Performing healthcheck...');
         await wait_on_1.default({
-            resources: [linodeUrl],
-            interval: 10 * 1000,
-            timeout: 10 * 60 * 1000,
-            validateStatus: (status) => status >= 200 && status <= 503,
-        }).catch((e) => {
-            loader.stop();
-            throw e;
+            resources: input.healthcheckUrls
+                .split(',')
+                .map((url) => (url.startsWith('http') ? url : `http://${url}`)),
+            log: true,
+            interval: 3 * 1000,
+            followRedirect: true,
+            timeout: 1 * 60 * 1000,
+            validateStatus: (status) => status === 200,
         });
-        core.info(`Success! ${linodeUrl} is up and running. Connected domains are: ${input.domains}`);
-        const ssh = new node_ssh_1.NodeSSH();
-        core.info(`SSHing ${input.deployUser}@${linodeHost}...`);
-        await ssh.connect({
-            host: linodeHost,
-            username: input.deployUser,
-            privateKey: input.deployUserPrivateKey,
-        });
-        const artifactClient = artifact.create();
-        const downloadedArtifact = await artifactClient.downloadArtifact(input.deployArtifact);
-        const { downloadPath, artifactName } = downloadedArtifact;
-        const localArtifact = `${downloadPath}/${artifactName}`;
-        const remoteArtifact = `/tmp/deploy/${downloadedArtifact.artifactName}`;
-        core.info(`Copying artifact ${localArtifact} to ${linodeHost}:${remoteArtifact}...`);
-        await ssh.putFile(localArtifact, remoteArtifact);
-        const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
-        const REPO_NAME = github.context.repo.repo;
-        const deployDir = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${REPO_NAME}-${input.appEnv}`;
-        const newStagingDir = `/tmp/deploy/${REPO_NAME}-${input.appEnv}-new-staging`;
-        const backupDir = `/tmp/deploy/${REPO_NAME}-${input.appEnv}-backup`;
-        const sshExecCommand = async (cmd, options) => {
-            const PS1 = `${input.deployUser}@${linodeHost}:${(options === null || options === void 0 ? void 0 : options.cwd) || '/'}$`;
-            core.info(`${PS1} ${cmd}`);
-            const errors = [];
-            const resp = await ssh.execCommand(cmd, {
-                onStdout: (chunk) => {
-                    core.info(chunk.toString('utf-8'));
-                },
-                onStderr: (chunk) => {
-                    // A lot of docker commands log to stderr, despite not being errors
-                    const chunkStr = chunk.toString('utf-8');
-                    const ignoreError = cmd.includes('docker') && !chunkStr.toLowerCase().includes('error');
-                    if (ignoreError) {
-                        core.info(chunkStr);
-                    }
-                    else {
-                        core.error(chunkStr);
-                        errors.push(chunkStr);
-                    }
-                },
-                ...options,
-            });
-            if (errors.length > 0)
-                throw new Error(errors.join('\n'));
-            return resp;
-        };
-        const v = core.isDebug() ? 'v' : '';
-        core.info('Creating backup...');
-        await sshExecCommand(`mkdir -p "${deployDir}"`);
-        await sshExecCommand(`rm -${v}rf "${backupDir}"`);
-        await sshExecCommand(`cp -${v}arT "${deployDir}" "${backupDir}"`);
-        try {
-            core.info('Deploying...');
-            await sshExecCommand(`mkdir -p "${newStagingDir}"`);
-            await sshExecCommand(`mv -v "${remoteArtifact}" "${newStagingDir}/"`);
-            await sshExecCommand(`tar -${v}xzf "${artifactName}"`, { cwd: newStagingDir });
-            await sshExecCommand(`rm -${v}rf "${deployDir}"`);
-            await sshExecCommand(`mv -v "${newStagingDir}" "${deployDir}"`);
-            await sshExecCommand(input.deployCommand, { cwd: deployDir });
-        }
-        catch (e) {
-            core.info('Rolling back...');
-            await sshExecCommand(`rm -${v}rf "${deployDir}"`);
-            await sshExecCommand(`mv -v "${backupDir}" "${deployDir}"`);
-            await sshExecCommand(input.deployCommand, { cwd: deployDir });
-            throw e;
-        }
-        finally {
-            await sshExecCommand(`rm -${v}rf "${remoteArtifact}" "${newStagingDir}" "${backupDir}"`);
-            ssh.dispose();
-        }
-    })();
-}
-catch (error) {
+    }
+    catch (e) {
+        core.info('Rolling back...');
+        await sshExecCommand(`rm -${v}rf "${deployDir}"`);
+        await sshExecCommand(`mv -v "${backupDir}" "${deployDir}"`);
+        await sshExecCommand(input.deployCommand, { cwd: deployDir });
+        throw e;
+    }
+    finally {
+        core.info('Cleaning up...');
+        await sshExecCommand(`rm -${v}rf "${remoteArtifact}" "${newStagingDir}" "${backupDir}"`);
+        ssh.dispose();
+    }
+})().catch((error) => {
     core.setFailed(error.message);
-}
+});
 
 
 /***/ }),
