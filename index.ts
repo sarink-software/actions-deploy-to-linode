@@ -278,7 +278,7 @@ const findOrCreateLinode = async (
         .map((url) => (url.startsWith('http') ? url : `http://${url}`)),
       interval: 3 * 1000,
       followRedirect: true,
-      timeout: 2 * 60 * 1000,
+      timeout: 1 * 60 * 1000,
       validateStatus: (status) => status === 200,
     });
   } catch (e) {
