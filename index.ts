@@ -236,10 +236,16 @@ try {
       const PS1 = `${input.deployUser}@${linodeHost}:${deployDirectory}$`;
       core.info(`${PS1} ${command}`);
       return ssh.execCommand(command, {
-        onStdout: (chunk) => core.info(chunk.toString('utf-8')),
-        onStderr: (chunk) =>
+        onStdout: (chunk) => {
+          core.info(chunk.toString('utf-8'));
+        },
+        onStderr: (chunk) => {
           // A lot of docker commands log to stderr, despite not being errors
-          core[command.includes('docker') ? 'info' : 'error'](chunk.toString('utf-8')),
+          const chunkStr = chunk.toString('utf-8');
+          const ignoreError =
+            command.includes('docker') && !chunkStr.toLowerCase().startsWith('error');
+          core[ignoreError ? 'info' : 'error'](chunkStr);
+        },
         ...options,
       });
     };
