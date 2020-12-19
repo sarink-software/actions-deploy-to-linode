@@ -231,7 +231,7 @@ try {
     const BASE_DEPLOY_DIRECTORY = '/srv/deploy'; // This value is also hardcoded in the stackscript
     const REPO_NAME = github.context.repo.repo;
     const deployDir = `${BASE_DEPLOY_DIRECTORY}/${REPO_NAME}/${REPO_NAME}-${input.appEnv}`;
-    const rollbackDir = `${deployDir}-old`;
+    const backupDir = `${deployDir}-backup`;
 
     const sshExecCommand = async (command: string, options?: SSHExecCommandOptions) => {
       const PS1 = `${input.deployUser}@${linodeHost}:${options?.cwd || ''}$`;
@@ -260,7 +260,9 @@ try {
     };
 
     await sshExecCommand(`mkdir -p ${deployDir}`);
-    await sshExecCommand(`cp -rvT ${deployDir} ${rollbackDir}`);
+
+    core.info('Creating backup...');
+    await sshExecCommand(`cp -rvT ${deployDir} ${backupDir}`);
 
     try {
       core.info('Deploying...');
@@ -271,7 +273,7 @@ try {
     } catch (e) {
       core.info('Rolling back...');
       await sshExecCommand(`rm -rfv ${deployDir}`);
-      await sshExecCommand(`cp -rvT ${rollbackDir} ${deployDir}`);
+      await sshExecCommand(`cp -rvT ${backupDir} ${deployDir}`);
       await sshExecCommand(input.deployCommand, { cwd: deployDir });
       throw e;
     } finally {
