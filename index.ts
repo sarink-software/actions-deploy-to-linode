@@ -273,7 +273,9 @@ const findOrCreateLinode = async (
     core.info('Performing healthcheck...');
     await waitOn({
       log: core.isDebug(),
-      resources: input.healthcheckUrls.split(','),
+      resources: input.healthcheckUrls
+        .split(',')
+        .map((url) => (url.startsWith('http') ? url : `http://${url}`)),
       interval: 3 * 1000,
       followRedirect: true,
       timeout: 2 * 60 * 1000,
