@@ -17,9 +17,6 @@ jobs:
       - name: Create build artifact
         uses: sarink-software/actions-create-build-artifact@main
         id: build
-        with:
-          build-command: npm run build
-          include: ./
 
       - name: Deploy to Linode
         uses: sarink-software/actions-deploy-to-linode@main
