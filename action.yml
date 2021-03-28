@@ -1,4 +1,4 @@
-name: Create build artifact
+name: Deploy to linode
 
 inputs:
   app-env:
@@ -27,9 +27,6 @@ inputs:
 
   deploy-command:
     required: true
-
-  deploy-directory:
-    required: false
 
   deploy-user:
     required: false
