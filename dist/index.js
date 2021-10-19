@@ -256,6 +256,7 @@ const findOrCreateLinode = async (label, createOptions) => {
     }
 })().catch((error) => {
     core.setFailed(error.message);
+    console.error(error);
 });
 
 
