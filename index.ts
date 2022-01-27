@@ -270,17 +270,19 @@ const findOrCreateLinode = async (
     await sshExecCommand(`mv -v "${newStagingDir}" "${deployDir}"`);
     await sshExecCommand(input.deployCommand, { cwd: deployDir });
 
-    core.info('Performing healthcheck...');
-    await waitOn({
-      resources: input.healthcheckUrls
-        .split(',')
-        .map((url) => (url.startsWith('http') ? url : `http://${url}`)),
-      log: true,
-      interval: 3 * 1000,
-      followRedirect: true,
-      timeout: 1 * 60 * 1000,
-      validateStatus: (status) => status === 200,
-    });
+    if (input.healthcheckUrls) {
+      core.info('Performing healthcheck...');
+      await waitOn({
+        resources: input.healthcheckUrls
+          .split(',')
+          .map((url) => (url.startsWith('http') ? url : `http://${url}`)),
+        log: true,
+        interval: 3 * 1000,
+        followRedirect: true,
+        timeout: 1 * 60 * 1000,
+        validateStatus: (status) => status === 200,
+      });
+    }
   } catch (e) {
     core.info('Rolling back...');
     await sshExecCommand(`rm -${v}rf "${deployDir}"`);
