@@ -85,7 +85,7 @@ const updateOrCreateARecord = async (
   }
 
   const newAttrs = { type: 'A' as const, ...attrs };
-  const loader = startLoader({ text: 'Creating new Record...' });
+  const loader = startLoader({ text: `Creating new A Record ${newAttrs.name}...` });
   core.debug(JSON.stringify(newAttrs));
   const newRecord = await createDomainRecord(domainId, newAttrs);
   loader.stop();
@@ -169,10 +169,12 @@ const findOrCreateLinode = async (
   });
 
   const parsedDomains = input.domains.split(',').reduce((accDomains, domainStr) => {
-    const parsedDomain = parseDomain(domainStr);
-    if (parsedDomain.type !== ParseResultType.Listed) throw new Error('Invalid domains string');
-    const name = `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`;
-    const subdomains = uniq([...(accDomains[name] || []), ...parsedDomain.subDomains]);
+    const parsed = parseDomain(domainStr);
+    if (parsed.type !== ParseResultType.Listed) throw new Error('Invalid domains string');
+    const name = `${parsed.domain}.${parsed.topLevelDomains}`;
+    const subdomains = uniq([...(accDomains[name] || []), parsed.subDomains.join('.')]).filter(
+      Boolean
+    );
     return { ...accDomains, [name]: subdomains };
   }, {} as Record<string, string[]>);
 
@@ -199,7 +201,7 @@ const findOrCreateLinode = async (
   const linodeHost = linode.ipv4[0];
   const linodeUrl = `http://${linodeHost}`;
   const loader = startLoader({
-    text: `Waiting for new Linode to initialize (checking ${linodeUrl})...`,
+    text: `Waiting for Linode to initialize (checking ${linodeUrl})...`,
   });
   await waitOn({
     log: core.isDebug(),
