@@ -81,7 +81,7 @@ const updateOrCreateARecord = async (domainId, attrs) => {
         return updatedRecord;
     }
     const newAttrs = { type: 'A', ...attrs };
-    const loader = startLoader({ text: 'Creating new Record...' });
+    const loader = startLoader({ text: `Creating new A Record ${newAttrs.name}...` });
     core.debug(JSON.stringify(newAttrs));
     const newRecord = await api_v4_1.createDomainRecord(domainId, newAttrs);
     loader.stop();
@@ -147,11 +147,11 @@ const findOrCreateLinode = async (label, createOptions) => {
         },
     });
     const parsedDomains = input.domains.split(',').reduce((accDomains, domainStr) => {
-        const parsedDomain = parse_domain_1.parseDomain(domainStr);
-        if (parsedDomain.type !== parse_domain_1.ParseResultType.Listed)
+        const parsed = parse_domain_1.parseDomain(domainStr);
+        if (parsed.type !== parse_domain_1.ParseResultType.Listed)
             throw new Error('Invalid domains string');
-        const name = `${parsedDomain.domain}.${parsedDomain.topLevelDomains}`;
-        const subdomains = lodash_1.uniq([...(accDomains[name] || []), ...parsedDomain.subDomains]);
+        const name = `${parsed.domain}.${parsed.topLevelDomains}`;
+        const subdomains = lodash_1.uniq([...(accDomains[name] || []), parsed.subDomains.join('.')]).filter(Boolean);
         return { ...accDomains, [name]: subdomains };
     }, {});
     core.debug('Parsed domains:');
@@ -167,7 +167,7 @@ const findOrCreateLinode = async (label, createOptions) => {
     const linodeHost = linode.ipv4[0];
     const linodeUrl = `http://${linodeHost}`;
     const loader = startLoader({
-        text: `Waiting for new Linode to initialize (checking ${linodeUrl})...`,
+        text: `Waiting for Linode to initialize (checking ${linodeUrl})...`,
     });
     await wait_on_1.default({
         log: core.isDebug(),
@@ -230,17 +230,19 @@ const findOrCreateLinode = async (label, createOptions) => {
         await sshExecCommand(`rm -${v}rf "${deployDir}"`);
         await sshExecCommand(`mv -v "${newStagingDir}" "${deployDir}"`);
         await sshExecCommand(input.deployCommand, { cwd: deployDir });
-        core.info('Performing healthcheck...');
-        await wait_on_1.default({
-            resources: input.healthcheckUrls
-                .split(',')
-                .map((url) => (url.startsWith('http') ? url : `http://${url}`)),
-            log: true,
-            interval: 3 * 1000,
-            followRedirect: true,
-            timeout: 1 * 60 * 1000,
-            validateStatus: (status) => status === 200,
-        });
+        if (input.healthcheckUrls) {
+            core.info('Performing healthcheck...');
+            await wait_on_1.default({
+                resources: input.healthcheckUrls
+                    .split(',')
+                    .map((url) => (url.startsWith('http') ? url : `http://${url}`)),
+                log: true,
+                interval: 3 * 1000,
+                followRedirect: true,
+                timeout: 1 * 60 * 1000,
+                validateStatus: (status) => status === 200,
+            });
+        }
     }
     catch (e) {
         core.info('Rolling back...');
